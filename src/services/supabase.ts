@@ -58,44 +58,6 @@ const mapTaskToDb = (task: Question, userId: string): Omit<DbTask, 'created_at' 
   };
 };
 
-export const saveTasks = async (tasks: Question[], asSheet: boolean = false) => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('User not authenticated');
-
-  try {
-    const dbTasks = tasks.map(task => mapTaskToDb(task, user.id));
-    
-    // Save tasks
-    const { data: savedTasks, error: tasksError } = await supabase
-      .from('tasks')
-      .upsert(dbTasks, { 
-        onConflict: 'id',
-        ignoreDuplicates: false 
-      })
-      .select();
-
-    if (tasksError) throw tasksError;
-
-    // If saving as a sheet, create a task sheet entry
-    if (asSheet && savedTasks) {
-      const { error: sheetError } = await supabase
-        .from('task_sheets')
-        .insert({
-          user_id: user.id,
-          title: `Task Sheet ${new Date().toLocaleDateString()}`,
-          tasks: savedTasks.map(task => task.id)
-        });
-
-      if (sheetError) throw sheetError;
-    }
-
-    return savedTasks;
-  } catch (error) {
-    console.error('Error saving tasks:', error);
-    throw error;
-  }
-};
-
 export async function getTasks() {
   const { data, error } = await supabase
     .from('tasks')
@@ -140,6 +102,387 @@ export async function deleteTasks(taskIds: string[]) {
     return { data, error };
   } catch (error) {
     console.error('Error deleting tasks:', error);
+    throw error;
+  }
+}
+
+// Get all sheets for the current user
+export async function getSheets() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    const { data, error } = await supabase
+      .from('task_sheets')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+      
+    if (error) throw error;
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching sheets:', error);
+    throw error;
+  }
+}
+
+// Get a single sheet by ID with its tasks
+export async function getSheetById(id: string) {
+  try {
+    // Get the sheet
+    const { data: sheet, error } = await supabase
+      .from('task_sheets')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) throw error;
+    
+    // Get all tasks for this sheet
+    const { data: tasks, error: tasksError } = await supabase
+      .from('tasks')
+      .select('*')  // Make sure to select all fields
+      .in('id', sheet.tasks);
+    
+    if (tasksError) throw tasksError;
+    
+    return { sheet, tasks };
+  } catch (error) {
+    console.error('Error fetching sheet:', error);
+    throw error;
+  }
+}
+
+// Create a new sheet
+export async function createSheet(title: string, description: string = '', taskIds: string[] = []) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    const { data, error } = await supabase
+      .from('task_sheets')
+      .insert({
+        title,
+        description,
+        tasks: taskIds,
+        user_id: user.id
+      })
+      .select()
+      .single();
+      
+    if (error) throw error;
+    
+    return data;
+  } catch (error) {
+    console.error('Error creating sheet:', error);
+    throw error;
+  }
+}
+
+// Update an existing sheet
+export async function updateSheet(sheetId: string, updates: Partial<{
+  title: string;
+  description: string;
+  tasks: string[];
+}>) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    // First check if the sheet belongs to the user
+    const { data: sheet, error: checkError } = await supabase
+      .from('task_sheets')
+      .select('user_id')
+      .eq('id', sheetId)
+      .single();
+      
+    if (checkError) throw checkError;
+    if (!sheet) throw new Error('Sheet not found');
+    if (sheet.user_id !== user.id) throw new Error('Unauthorized');
+    
+    // Then update the sheet
+    const { data, error } = await supabase
+      .from('task_sheets')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sheetId)
+      .select()
+      .single();
+      
+    if (error) throw error;
+    
+    return data;
+  } catch (error) {
+    console.error('Error updating sheet:', error);
+    throw error;
+  }
+}
+
+// Delete sheets
+export async function deleteSheets(sheetIds: string[]) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Check if all sheets belong to the user
+    const { data: sheets, error: checkError } = await supabase
+      .from('task_sheets')
+      .select('id, user_id')
+      .in('id', sheetIds);
+      
+    if (checkError) throw checkError;
+    
+    const unauthorizedSheets = sheets?.filter(sheet => sheet.user_id !== user.id);
+    if (unauthorizedSheets && unauthorizedSheets.length > 0) {
+      throw new Error('Unauthorized to delete some sheets');
+    }
+    
+    // Delete the sheets
+    const { data, error } = await supabase
+      .from('task_sheets')
+      .delete()
+      .in('id', sheetIds);
+      
+    if (error) throw error;
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting sheets:', error);
+    throw error;
+  }
+}
+
+// Update the copySheet function to use the new structure
+export async function copySheet(sheetId: string) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Get the original sheet
+    const original = await getSheetById(sheetId);
+    
+    // Insert a copy with the updated structure
+    const { data, error } = await supabase
+      .from('task_sheets')
+      .insert({
+        title: `${original.sheet.title} (Copy)`,
+        description: original.sheet.description,
+        tasks: original.sheet.tasks,
+        user_id: user.id
+      })
+      .select('id')
+      .single();
+    
+    if (error) throw error;
+    
+    return data.id;
+  } catch (error) {
+    console.error('Error copying sheet:', error);
+    throw error;
+  }
+}
+
+// Add function to share a sheet with another user
+export async function shareSheet(sheetId: string, recipientEmail: string) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    // First check if the sheet belongs to the user
+    const { data: sheet, error: checkError } = await supabase
+      .from('task_sheets')
+      .select('*')
+      .eq('id', sheetId)
+      .eq('user_id', user.id)
+      .single();
+      
+    if (checkError) throw checkError;
+    if (!sheet) throw new Error('Sheet not found');
+    
+    // Find the recipient user
+    const { data: recipient, error: recipientError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', recipientEmail)
+      .single();
+      
+    if (recipientError) throw new Error('Recipient not found');
+    
+    // Create a shared sheet record
+    const { data, error } = await supabase
+      .from('shared_sheets')
+      .insert({
+        sheet_id: sheetId,
+        owner_id: user.id,
+        recipient_id: recipient.id,
+        shared_at: new Date().toISOString()
+      });
+      
+    if (error) throw error;
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error sharing sheet:', error);
+    throw error;
+  }
+}
+
+// Update the saveSheetVersion function
+export async function saveSheetVersion(sheetId: string) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Get the current sheet
+    const { sheet } = await getSheetById(sheetId);
+    
+    // Save a version
+    const { data, error } = await supabase
+      .from('sheet_versions')
+      .insert({
+        sheet_id: sheetId,
+        title: sheet.title,
+        description: sheet.description,
+        tasks: sheet.tasks,
+        created_at: new Date().toISOString(),
+        user_id: user.id
+      });
+      
+    if (error) throw error;
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving sheet version:', error);
+    throw error;
+  }
+}
+
+// Get versions of a sheet
+export async function getSheetVersions(sheetId: string) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    const { data, error } = await supabase
+      .from('sheet_versions')
+      .select('*')
+      .eq('sheet_id', sheetId)
+      .order('created_at', { ascending: false });
+      
+    if (error) throw error;
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching sheet versions:', error);
+    throw error;
+  }
+}
+
+// Save tasks to Supabase
+export async function saveTasks(tasks: Question[], returnIds = false): Promise<string[]> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    const taskData = tasks.map(task => ({
+      id: task.id,
+      user_id: user.id,
+      text: task.text,
+      type: task.type,
+      topic: task.topic,
+      difficulty: task.difficulty,
+      correct_answer: task.correctAnswer || null,
+      explanation: task.explanation || null,
+      context: task.context || null,
+      instructions: task.instructions || null,
+      learning_outcome: task.learningOutcome || null,
+      answer: task.answer || null
+    }));
+    
+    const { data, error } = await supabase
+      .from('tasks')
+      .upsert(taskData, { onConflict: 'id' })
+      .select('id');
+    
+    if (error) throw error;
+    
+    return returnIds ? (data?.map(item => item.id) || []) : [];
+  } catch (error) {
+    console.error('Error saving tasks:', error);
+    throw error;
+  }
+}
+
+// Save a task sheet
+export async function saveTaskSheet(sheet: Omit<TaskSheet, 'id' | 'created_at' | 'updated_at'>): Promise<string> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Make sure all tasks exist in the database
+    const taskIds = sheet.tasks;
+    const { data: existingTasks, error: checkError } = await supabase
+      .from('tasks')
+      .select('id')
+      .in('id', taskIds);
+    
+    if (checkError) throw checkError;
+    
+    const existingTaskIds = new Set(existingTasks?.map(t => t.id) || []);
+    const missingTaskIds = taskIds.filter(id => !existingTaskIds.has(id));
+    
+    if (missingTaskIds.length > 0) {
+      throw new Error(`Some tasks don't exist in the database: ${missingTaskIds.join(', ')}`);
+    }
+    
+    // Insert the sheet
+    const { data, error } = await supabase
+      .from('task_sheets')
+      .insert({
+        ...sheet,
+        user_id: user.id
+      })
+      .select('id')
+      .single();
+    
+    if (error) throw error;
+    
+    return data.id;
+  } catch (error) {
+    console.error('Error saving task sheet:', error);
     throw error;
   }
 }

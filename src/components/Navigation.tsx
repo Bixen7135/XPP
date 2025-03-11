@@ -10,7 +10,11 @@ import {
   ChevronDown,
   GraduationCap,
   User,
-  LogOut
+  LogOut,
+  BookOpen,
+  Settings,
+  TrendingUp,
+  Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguageStore } from '../store/languageStore';
@@ -23,11 +27,13 @@ type NavItemType = {
   label: string;
   isActive?: boolean;
   className?: string;
+  requiresAuth: boolean;
 } | {
   type: 'dropdown';
   icon: React.ReactNode;
   label: string;
   items: { path: string; label: string; }[];
+  requiresAuth: boolean;
 };
 
 export const Navigation = () => {
@@ -49,28 +55,40 @@ export const Navigation = () => {
       label: t('nav.home'),
       icon: <Home className="h-5 w-5" />,
       isActive: location.pathname === '/',
-      className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md'
+      className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md',
+      requiresAuth: true
     },
     {
       path: '/generate-exam',
       label: t('nav.generateExam'),
       icon: <FileText className="h-5 w-5" />,
       isActive: location.pathname === '/generate-exam' || location.pathname === '/exam-preview',
-      className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md'
+      className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md',
+      requiresAuth: true
     },
     {
       path: '/generate-task',
       label: t('nav.generateTask'),
       icon: <ClipboardList className="h-5 w-5" />,
       isActive: location.pathname === '/generate-task' || location.pathname === '/task-preview',
-      className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md'
+      className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md',
+      requiresAuth: true
     },
     {
       path: '/library',
       label: t('nav.library'),
       icon: <Library className="h-5 w-5" />,
       isActive: location.pathname === '/library',
-      className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md'
+      className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md',
+      requiresAuth: true
+    },
+    {
+      path: '/sheets',
+      label: 'Task Sheets',
+      icon: <Layers className="h-5 w-5" />,
+      isActive: location.pathname.startsWith('/sheets'),
+      className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md',
+      requiresAuth: true
     }
   ];
 
@@ -92,12 +110,13 @@ export const Navigation = () => {
     fetchProfile();
   }, [user]);
 
-  const NavItem = ({ path, icon, label, isActive, className = '' }: { 
+  const NavItem = ({ path, icon, label, isActive, className = '', requiresAuth }: { 
     path: string; 
     icon: React.ReactNode; 
     label: string; 
     isActive?: boolean;
     className?: string;
+    requiresAuth: boolean;
   }) => {
     const shouldHighlight = isActive || (path === '/generate-task' && isTaskPreviewPage);
     return (
@@ -188,7 +207,7 @@ export const Navigation = () => {
                     </AnimatePresence>
                   </div>
                 ) : (
-                  <NavItem key={index} path={item.path} icon={item.icon} label={item.label} isActive={item.isActive} className={item.className} />
+                  <NavItem key={index} path={item.path} icon={item.icon} label={item.label} isActive={item.isActive} className={item.className} requiresAuth={item.requiresAuth} />
                 )
               )}
             </div>
@@ -217,24 +236,49 @@ export const Navigation = () => {
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1"
+                    className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-50"
                   >
                     <Link
                       to="/profile"
                       onClick={handleProfileClick}
-                      className={`block px-4 py-2 text-sm ${
-                        isProfileActive
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
+                      className={`block px-4 py-2 text-gray-700 hover:bg-gray-100`}
                     >
-                      Profile Settings
+                      <div className="flex items-center">
+                        <User className="h-4 w-4 mr-2" />
+                        Profile
+                      </div>
                     </Link>
+                    
+                    <Link
+                      to="/statistics"
+                      onClick={() => setShowProfileMenu(false)}
+                      className={`block px-4 py-2 text-gray-700 hover:bg-gray-100`}
+                    >
+                      <div className="flex items-center">
+                        <TrendingUp className="h-4 w-4 mr-2" />
+                        Statistics
+                      </div>
+                    </Link>
+                    
+                    <Link
+                      to="/settings"
+                      onClick={() => setShowProfileMenu(false)}
+                      className={`block px-4 py-2 text-gray-700 hover:bg-gray-100`}
+                    >
+                      <div className="flex items-center">
+                        <Settings className="h-4 w-4 mr-2" />
+                        Settings
+                      </div>
+                    </Link>
+                    
                     <button
                       onClick={handleSignOut}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                      className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
                     >
-                      Sign Out
+                      <div className="flex items-center">
+                        <LogOut className="h-4 w-4 mr-2" />
+                        Sign Out
+                      </div>
                     </button>
                   </motion.div>
                 )}

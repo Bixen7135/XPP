@@ -10,6 +10,12 @@ import { Register } from './components/auth/Register';
 import { Profile } from './components/auth/Profile';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { useToast, ToastComponent } from './components/Toast';
+import { SheetsLibrary } from './components/SheetsLibrary';
+import { SheetView } from './components/SheetView';
+import { SheetEdit } from './components/SheetEdit';
+import { Settings } from './components/auth/Settings';
+import { Statistics } from './components/auth/Statistics';
+import { Footer } from './components/common/Footer';
 
 // Lazy load components
 const ExamTypeSelector = lazy(() => import('./components/ExamTypeSelector').then(module => ({
@@ -38,11 +44,11 @@ function App() {
   const { ToastComponent } = useToast();
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50">
+      <div className="flex flex-col min-h-screen bg-gray-50">
         <Navigation />
         <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>
-            <main className="container mx-auto px-4 py-8">
+            <main className="container mx-auto px-4 py-8 flex-grow">
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
@@ -85,10 +91,36 @@ function App() {
                   </ProtectedRoute>
                 } />
                 <Route path="/task-completion" element={<TaskCompletion />} />
+                <Route path="/sheets" element={
+                  <ProtectedRoute>
+                    <SheetsLibrary />
+                  </ProtectedRoute>
+                } />
+                <Route path="/sheets/:id" element={
+                  <ProtectedRoute>
+                    <SheetView />
+                  </ProtectedRoute>
+                } />
+                <Route path="/sheets/:id/edit" element={
+                  <ProtectedRoute>
+                    <SheetEdit />
+                  </ProtectedRoute>
+                } />
+                <Route path="/settings" element={
+                  <ProtectedRoute>
+                    <Settings />
+                  </ProtectedRoute>
+                } />
+                <Route path="/statistics" element={
+                  <ProtectedRoute>
+                    <Statistics />
+                  </ProtectedRoute>
+                } />
               </Routes>
             </main>
           </Suspense>
         </ErrorBoundary>
+        <Footer />
         <ToastComponent />
       </div>
     </BrowserRouter>

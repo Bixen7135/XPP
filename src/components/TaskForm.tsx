@@ -7,13 +7,137 @@ import { Loader2, BookOpen, Settings2, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PageLayout } from './common/PageLayout';
 
+type TaskType = {
+  value: string;
+  label: string;
+  subjects: string[]; // subjects this task type is applicable to
+};
+
+const taskTypes: TaskType[] = [
+  { value: 'Multiple Choice', label: 'Multiple Choice', subjects: ['all'] },
+  { value: 'Problem Solving', label: 'Problem Solving', subjects: ['Mathematics', 'Physics', 'Chemistry', 'Computer Science'] },
+  { value: 'Short Answer', label: 'Short Answer', subjects: ['all'] },
+  { value: 'Essay', label: 'Essay', subjects: ['English', 'History', 'Philosophy', 'Psychology'] },
+  { value: 'True/False', label: 'True/False', subjects: ['all'] },
+  { value: 'Fill in the Blank', label: 'Fill in the Blank', subjects: ['all'] },
+  { value: 'Matching', label: 'Matching', subjects: ['all'] },
+  { value: 'Coding', label: 'Coding', subjects: ['Computer Science'] },
+  { value: 'Debugging', label: 'Debugging', subjects: ['Computer Science'] },
+  { value: 'Case Study', label: 'Case Study', subjects: ['Business', 'Psychology', 'Biology', 'History'] },
+  { value: 'Diagram Analysis', label: 'Diagram Analysis', subjects: ['Biology', 'Physics', 'Geography', 'Art'] },
+  { value: 'Data Analysis', label: 'Data Analysis', subjects: ['Mathematics', 'Economics', 'Psychology', 'Geography'] },
+  { value: 'Theory', label: 'Theory', subjects: ['all'] },
+  { value: 'Practical', label: 'Practical', subjects: ['Physics', 'Chemistry', 'Biology', 'Computer Science', 'Music', 'Art'] }
+];
+
 const subjects: Record<string, string[]> = {
-  'Mathematics': ['Algebra', 'Geometry', 'Calculus', 'Statistics', 'Trigonometry'],
-  'Physics': ['Mechanics', 'Thermodynamics', 'Electricity', 'Optics', 'Quantum Physics'],
-  'Chemistry': ['Organic Chemistry', 'Inorganic Chemistry', 'Physical Chemistry', 'Biochemistry'],
-  'Biology': ['Cell Biology', 'Genetics', 'Ecology', 'Human Anatomy', 'Evolution'],
-  'English': ['Grammar', 'Literature', 'Writing', 'Comprehension', 'Vocabulary'],
-  'History': ['World History', 'Ancient Civilizations', 'Modern History', 'Cultural History']
+  'Mathematics': ['Algebra', 'Geometry', 'Calculus', 'Statistics', 'Trigonometry', 'Number Theory', 'Linear Algebra', 'Discrete Mathematics', 'Mathematical Logic', 'Real Analysis'],
+  
+  'Physics': ['Mechanics', 'Thermodynamics', 'Electricity', 'Optics', 'Quantum Physics', 'Nuclear Physics', 'Astrophysics', 'Fluid Dynamics', 'Relativity', 'Electromagnetism'],
+  
+  'Chemistry': ['Organic Chemistry', 'Inorganic Chemistry', 'Physical Chemistry', 'Biochemistry', 'Analytical Chemistry', 'Polymer Chemistry', 'Environmental Chemistry', 'Medicinal Chemistry', 'Nuclear Chemistry', 'Electrochemistry'],
+  
+  'Biology': ['Cell Biology', 'Genetics', 'Ecology', 'Human Anatomy', 'Evolution', 'Microbiology', 'Botany', 'Zoology', 'Molecular Biology', 'Physiology'],
+  
+  'Computer Science': [
+    'Programming Fundamentals',
+    'Data Structures',
+    'Algorithms',
+    'Database Systems',
+    'Web Development',
+    'Computer Networks',
+    'Operating Systems',
+    'Software Engineering',
+    'Cybersecurity',
+    'Artificial Intelligence',
+    'Machine Learning',
+    'Computer Architecture',
+    'Cloud Computing',
+    'Mobile Development',
+    'Blockchain Technology'
+  ],
+  
+  'English': ['Grammar', 'Literature', 'Writing', 'Comprehension', 'Vocabulary', 'Creative Writing', 'Business English', 'Academic Writing', 'Public Speaking', 'Literary Analysis'],
+  
+  'History': ['World History', 'Ancient Civilizations', 'Modern History', 'Cultural History', 'Military History', 'Economic History', 'Social History', 'Political History', 'Art History', 'Archaeological Studies'],
+  
+  'Geography': [
+    'Physical Geography',
+    'Human Geography',
+    'Cartography',
+    'Climate Studies',
+    'Urban Geography',
+    'Economic Geography',
+    'Environmental Geography',
+    'Population Studies',
+    'Geographic Information Systems',
+    'Regional Studies'
+  ],
+  
+  'Economics': [
+    'Microeconomics',
+    'Macroeconomics',
+    'International Economics',
+    'Development Economics',
+    'Financial Economics',
+    'Labor Economics',
+    'Public Economics',
+    'Environmental Economics',
+    'Behavioral Economics',
+    'Economic History'
+  ],
+  
+  'Psychology': [
+    'Clinical Psychology',
+    'Cognitive Psychology',
+    'Developmental Psychology',
+    'Social Psychology',
+    'Behavioral Psychology',
+    'Neuropsychology',
+    'Educational Psychology',
+    'Industrial Psychology',
+    'Personality Psychology',
+    'Research Methods'
+  ],
+  
+  'Philosophy': [
+    'Ethics',
+    'Logic',
+    'Metaphysics',
+    'Epistemology',
+    'Political Philosophy',
+    'Philosophy of Science',
+    'Philosophy of Mind',
+    'Aesthetics',
+    'Eastern Philosophy',
+    'Contemporary Philosophy'
+  ],
+  
+  'Art': [
+    'Art History',
+    'Drawing',
+    'Painting',
+    'Sculpture',
+    'Digital Art',
+    'Photography',
+    'Graphic Design',
+    'Art Theory',
+    'Contemporary Art',
+    'Visual Communication'
+  ],
+  
+  'Music': [
+    'Music Theory',
+    'Music History',
+    'Composition',
+    'Performance',
+    'Music Technology',
+    'World Music',
+    'Music Analysis',
+    'Orchestration',
+    'Music Education',
+    'Sound Design'
+  ]
 };
 
 function validateConfig(config: TaskConfig): string | null {
@@ -177,10 +301,16 @@ export const TaskForm = () => {
                   required
                 >
                   <option value="">Select type</option>
-                  <option value="Multiple Choice">Multiple Choice</option>
-                  <option value="Problem Solving">Problem Solving</option>
-                  <option value="Short Answer">Short Answer</option>
-                  <option value="Essay">Essay</option>
+                  {taskTypes
+                    .filter(type => 
+                      type.subjects.includes('all') || 
+                      type.subjects.includes(selectedSubject)
+                    )
+                    .map(type => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
                 </select>
               </div>
 

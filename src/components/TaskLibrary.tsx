@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useExamStore } from '../store/examStore';
-import { Search, Download, Trash2, BookOpen, Share2, Plus, Filter, Grid, List, ChevronDown, ChevronUp, Edit2, FileText, Loader2, AlertTriangle } from 'lucide-react';
+import { Search, Download, Trash2, BookOpen, Share2, Plus, Filter, Grid, List, ChevronDown, ChevronUp, Edit2, FileText, Loader2, AlertTriangle, X, CheckCircle2, Save } from 'lucide-react';
 import type { Question } from '../types/exam';
 import { getTasks, deleteTasks } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
@@ -10,11 +10,20 @@ import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 import { TaskEditor } from './TaskEditor';
 import { toast } from 'react-hot-toast';
-import { downloadDocument } from '../services/documentGenerator';
 import { TaskCreator } from './TaskCreation';
+import { supabase } from '../services/supabase';
+import { SaveSheet } from './SaveSheet';
+import { SheetDownloadModal } from './SheetDownloadModal';
 
 type SortKey = 'date' | 'topic' | 'difficulty' | 'type';
 type ViewMode = 'grid' | 'list';
+type DocumentFormat = 'pdf' | 'docx';
+
+interface Filters {
+  topics: Set<string>;
+  difficulties: Set<string>;
+  types: Set<string>;
+}
 
 const formatMathText = (text: string) => {
   if (!text) return '';
@@ -38,6 +47,40 @@ const formatMathText = (text: string) => {
   });
 };
 
+const ActionButton = ({ 
+  onClick, 
+  icon, 
+  label, 
+  variant = 'secondary',
+  disabled = false 
+}: {
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  icon: React.ReactNode;
+  label: string;
+  variant?: 'primary' | 'secondary' | 'danger';
+  disabled?: boolean;
+}) => {
+  const baseStyles = "inline-flex items-center justify-center px-4 py-2 rounded-lg transition-all duration-200 transform hover:scale-105 active:scale-95 gap-2";
+  const variantStyles = {
+    primary: "bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg",
+    secondary: "bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900",
+    danger: "bg-red-100 text-red-600 hover:bg-red-200 hover:text-red-700"
+  };
+
+  return (
+    <motion.button
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      disabled={disabled}
+      className={`${baseStyles} ${variantStyles[variant]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+    >
+      {icon}
+      {label}
+    </motion.button>
+  );
+};
+
 export const TaskLibrary = () => {
   const { questions, setQuestions } = useExamStore();
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,15 +98,25 @@ export const TaskLibrary = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [editingTask, setEditingTask] = useState<Question | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [documentOptions, setDocumentOptions] = useState({
-    includeSolutions: false,
-    includeAnswers: false
-  });
-  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [expandedSolutions, setExpandedSolutions] = useState<Set<string>>(new Set());
   const [expandedAnswers, setExpandedAnswers] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState<Filters>({
+    topics: new Set(),
+    difficulties: new Set(),
+    types: new Set()
+  });
+  const [topicSearch, setTopicSearch] = useState('');
+  const [typeSearch, setTypeSearch] = useState('');
+  const [showTopicDropdown, setShowTopicDropdown] = useState(false);
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const topicSearchRef = useRef<HTMLDivElement>(null);
+  const typeSearchRef = useRef<HTMLDivElement>(null);
+  const [searchTags, setSearchTags] = useState<string[]>([]);
+  const [currentSearch, setCurrentSearch] = useState('');
+  const [showSaveSheet, setShowSaveSheet] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   const subjects = useMemo(() => 
     Array.from(new Set(questions.map(q => q.topic))).sort(), 
@@ -75,17 +128,58 @@ export const TaskLibrary = () => {
     [questions]
   );
 
+  const toggleFilter = (category: keyof Filters, value: string) => {
+    setFilters(prev => {
+      const newFilters = { ...prev };
+      if (prev[category].has(value)) {
+        newFilters[category] = new Set([...prev[category]].filter(v => v !== value));
+      } else {
+        newFilters[category] = new Set([...prev[category], value]);
+      }
+      return newFilters;
+    });
+  };
+
+  const getFilteredOptions = (items: string[], searchTerm: string, selectedItems: Set<string>) => {
+    return items
+      .filter(item => 
+        !selectedItems.has(item) && // Exclude already selected items
+        item.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && currentSearch.trim()) {
+      e.preventDefault();
+      setSearchTags([...searchTags, currentSearch.trim()]);
+      setCurrentSearch('');
+    } else if (e.key === 'Backspace' && !currentSearch && searchTags.length > 0) {
+      setSearchTags(searchTags.slice(0, -1));
+    }
+  };
+
+  const removeSearchTag = (tagToRemove: string) => {
+    setSearchTags(searchTags.filter(tag => tag !== tagToRemove));
+  };
+
   const filteredAndSortedTasks = useMemo(() => {
     return questions
       .filter(task => {
-        const matchesSearch = 
-          task.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          task.topic.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          task.type.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesDifficulty = filterDifficulty === 'all' || task.difficulty === filterDifficulty;
-        const matchesType = filterType === 'all' || task.type === filterType;
-        const matchesSubject = filterSubject === 'all' || task.topic === filterSubject;
-        return matchesSearch && matchesDifficulty && matchesType && matchesSubject;
+        const matchesSearchTags = searchTags.length === 0 || searchTags.some(tag =>
+          task.text.toLowerCase().includes(tag.toLowerCase()) ||
+          task.topic.toLowerCase().includes(tag.toLowerCase()) ||
+          task.type.toLowerCase().includes(tag.toLowerCase())
+        );
+        const matchesCurrentSearch = !currentSearch || 
+          task.text.toLowerCase().includes(currentSearch.toLowerCase()) ||
+          task.topic.toLowerCase().includes(currentSearch.toLowerCase()) ||
+          task.type.toLowerCase().includes(currentSearch.toLowerCase());
+        
+        const matchesDifficulty = filters.difficulties.size === 0 || filters.difficulties.has(task.difficulty);
+        const matchesType = filters.types.size === 0 || filters.types.has(task.type);
+        const matchesSubject = filters.topics.size === 0 || filters.topics.has(task.topic);
+        
+        return matchesSearchTags && matchesCurrentSearch && matchesDifficulty && matchesType && matchesSubject;
       })
       .sort((a, b) => {
         let comparison = 0;
@@ -105,7 +199,7 @@ export const TaskLibrary = () => {
         }
         return sortDirection === 'asc' ? comparison : -comparison;
       });
-  }, [questions, searchTerm, filterDifficulty, filterType, filterSubject, sortBy, sortDirection]);
+  }, [questions, searchTags, currentSearch, filters, sortBy, sortDirection]);
 
   useEffect(() => {
     loadTasks();
@@ -115,10 +209,29 @@ export const TaskLibrary = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const { data, error } = await getTasks();
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: false });
+
       if (error) throw error;
+
       if (data) {
-        setQuestions(data as Question[]);
+        const mappedTasks: Question[] = data.map(task => ({
+          id: task.id,
+          text: task.text,
+          type: task.type,
+          topic: task.topic,
+          difficulty: task.difficulty,
+          correctAnswer: task.correct_answer,
+          answer: task.answers?.answer || null,
+          answers: Array.isArray(task.answers) ? task.answers : null,
+          explanation: task.explanation,
+          context: task.context,
+          instructions: task.instructions,
+          learningOutcome: task.learning_outcome
+        }));
+        setQuestions(mappedTasks);
       }
     } catch (err) {
       setError('Failed to load tasks. Please try again later.');
@@ -169,7 +282,7 @@ export const TaskLibrary = () => {
     }
   };
 
-  const handleBulkAction = async (action: 'download' | 'delete' | 'share', format?: 'pdf' | 'docx') => {
+  const handleBulkAction = async (action: 'delete' | 'share') => {
     const selectedTasksList = filteredAndSortedTasks.filter(task => 
       selectedTasks.has(task.id)
     );
@@ -185,16 +298,6 @@ export const TaskLibrary = () => {
           setShowDeleteConfirm(true);
           break;
 
-        case 'download':
-          if (!format) {
-            throw new Error('Download format not specified');
-          }
-          setLoading(true);
-          await downloadDocument(selectedTasksList, format, documentOptions);
-          setShowDownloadMenu(false);
-          toast.success(`${selectedTasksList.length} task(s) downloaded successfully`);
-          break;
-
         case 'share':
           // TODO: Implement share functionality
           console.log('Share functionality not implemented yet');
@@ -203,14 +306,11 @@ export const TaskLibrary = () => {
     } catch (err) {
       console.error(`Error performing ${action}:`, err);
       toast.error(`Failed to ${action} tasks: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setLoading(false);
     }
   };
 
   const confirmDelete = async () => {
     try {
-      setLoading(true);
       await deleteTasks(Array.from(selectedTasks));
       toast.success(`${selectedTasks.size} task(s) deleted successfully`);
       await loadTasks();
@@ -219,8 +319,6 @@ export const TaskLibrary = () => {
     } catch (error) {
       toast.error('Failed to delete tasks');
       console.error('Delete error:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -266,30 +364,48 @@ export const TaskLibrary = () => {
     });
   };
 
-  const handleDownloadClick = async (format: 'pdf' | 'docx') => {
-    try {
-      setLoading(true);
-      const selectedTasksList = filteredAndSortedTasks.filter(task => 
-        selectedTasks.has(task.id)
-      );
+  const toggleDetails = (e: React.MouseEvent, taskId: string) => {
+    e.stopPropagation();
+    setExpandedDetails(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  };
 
-      if (selectedTasksList.length === 0) {
-        toast.error('Please select tasks to download');
+  const handleSaveAsSheet = async (title: string, description?: string) => {
+    try {
+      if (selectedTasks.size === 0) {
+        toast.error('Please select tasks to save');
         return;
       }
 
-      await downloadDocument(
-        selectedTasksList,
-        format,
-        documentOptions
-      );
-      setShowDownloadMenu(false);
-      toast.success(`${selectedTasksList.length} task(s) downloaded successfully`);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No authenticated user found');
+
+      const { data, error } = await supabase
+        .from('task_sheets')
+        .insert({
+          user_id: user.id,
+          title,
+          description,
+          tasks: Array.from(selectedTasks)
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success('Task sheet saved successfully');
+      setShowSaveSheet(false);
+      setSelectedTasks(new Set());
     } catch (error) {
-      toast.error(`Failed to download ${format.toUpperCase()}`);
-      console.error('Download error:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error saving task sheet:', error);
+      toast.error('Failed to save task sheet');
     }
   };
 
@@ -305,15 +421,9 @@ export const TaskLibrary = () => {
                 ${expandedTask === task.id ? 'shadow-lg' : ''}`}
       onClick={(e) => handleTaskClick(e, task.id)}
     >
-      {editingTask?.id === task.id ? (
-        <TaskEditor
-          task={task}
-          onSave={handleSave}
-          onCancel={() => setEditingTask(null)}
-          mode="edit"
-        />
-      ) : (
         <>
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1">
           <div className="flex justify-between items-start mb-4" onClick={e => e.stopPropagation()}>
             <div className="flex flex-wrap gap-2">
               <span className={`px-3 py-1 rounded-full text-sm font-medium
@@ -329,6 +439,27 @@ export const TaskLibrary = () => {
                 {task.type}
               </span>
             </div>
+              </div>
+
+              <div className="prose prose-sm max-w-none mb-4">
+                <div className="text-gray-900 text-lg font-medium mb-4">
+                  {formatMathText(task.text)}
+                </div>
+
+                <button
+                  onClick={(e) => toggleDetails(e, task.id)}
+                  className="flex items-center gap-2 text-gray-500 hover:text-gray-700"
+                >
+                  {expandedDetails.has(task.id) ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                  {expandedDetails.has(task.id) ? 'Hide Details' : 'Show Details'}
+                </button>
+              </div>
+            </div>
+            
             <div className="flex gap-2">
               <Button
                 variant="ghost"
@@ -342,71 +473,61 @@ export const TaskLibrary = () => {
             </div>
           </div>
 
-          <div className="prose prose-sm max-w-none mb-4">
-            <div className="text-gray-900 text-lg font-medium mb-4">
-              {formatMathText(task.text)}
-            </div>
-
-            {task.correctAnswer && (
-              <div className="mb-3">
-                <button
-                  onClick={(e) => toggleSolution(e, task.id)}
-                  className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-                >
-                  {expandedSolutions.has(task.id) ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                  Solution
-                </button>
                 <AnimatePresence>
-                  {expandedSolutions.has(task.id) && (
+            {expandedDetails.has(task.id) && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="mt-2 bg-green-50 rounded-lg p-4"
-                    >
-                      <div className="text-green-700">
+                className="space-y-4"
+              >
+                {task.correctAnswer && (
+                  <div className="pl-4 border-l-4 border-green-500">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                      Solution:
+                    </h4>
+                    <div className="text-gray-600">
                         {formatMathText(task.correctAnswer)}
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
             )}
 
             {task.answer && (
-              <div>
-                <button
-                  onClick={(e) => toggleAnswer(e, task.id)}
-                  className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-                >
-                  {expandedAnswers.has(task.id) ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                  Answer
-                </button>
-                <AnimatePresence>
-                  {expandedAnswers.has(task.id) && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="mt-2 bg-blue-50 rounded-lg p-4"
-                    >
-                      <div className="text-blue-700">
+                  <div className="pl-4 border-l-4 border-blue-500">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                      Answer:
+                    </h4>
+                    <div className="text-gray-600">
                         {formatMathText(task.answer)}
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                  </div>
+                )}
+
+                {(task.context || task.instructions || task.learningOutcome) && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    {task.context && (
+                      <div className="mb-3">
+                        <h4 className="text-sm font-semibold text-gray-700">Context:</h4>
+                        <p className="text-gray-600">{formatMathText(task.context)}</p>
               </div>
             )}
+                    {task.instructions && (
+                      <div className="mb-3">
+                        <h4 className="text-sm font-semibold text-gray-700">Instructions:</h4>
+                        <p className="text-gray-600">{formatMathText(task.instructions)}</p>
           </div>
+                    )}
+                    {task.learningOutcome && (
+                      <div className="mb-3">
+                        <h4 className="text-sm font-semibold text-gray-700">Learning Outcome:</h4>
+                        <p className="text-gray-600">{formatMathText(task.learningOutcome)}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <AnimatePresence>
             {expandedTask === task.id && (
@@ -417,28 +538,6 @@ export const TaskLibrary = () => {
                 className="mt-4 space-y-4 border-t pt-4"
               >
                 <div className="flex justify-end gap-2 mt-4" onClick={e => e.stopPropagation()}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<Download className="w-4 h-4" />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleBulkAction('download');
-                    }}
-                  >
-                    Download
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<Share2 className="w-4 h-4" />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleBulkAction('share');
-                    }}
-                  >
-                    Share
-                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -457,7 +556,6 @@ export const TaskLibrary = () => {
             )}
           </AnimatePresence>
         </>
-      )}
     </motion.div>
   );
 
@@ -562,87 +660,46 @@ export const TaskLibrary = () => {
     </div>
   );
 
-  const DownloadMenu = () => (
-    <div className="relative download-menu">
-      <AnimatePresence>
-        {showDownloadMenu && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl 
-                       border border-gray-200 overflow-hidden z-20"
-          >
-            <div className="p-4 border-b border-gray-100 bg-gray-50">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Export Options</h3>
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 text-sm text-gray-600 hover:text-gray-900">
-                  <input
-                    type="checkbox"
-                    checked={documentOptions.includeSolutions}
-                    onChange={(e) => setDocumentOptions(prev => ({
-                      ...prev,
-                      includeSolutions: e.target.checked
-                    }))}
-                    className="rounded border-gray-300 text-blue-600 
-                             focus:ring-blue-500 transition-colors"
-                  />
-                  <span>Include Solutions</span>
-                </label>
-                <label className="flex items-center gap-3 text-sm text-gray-600 hover:text-gray-900">
-                  <input
-                    type="checkbox"
-                    checked={documentOptions.includeAnswers}
-                    onChange={(e) => setDocumentOptions(prev => ({
-                      ...prev,
-                      includeAnswers: e.target.checked
-                    }))}
-                    className="rounded border-gray-300 text-blue-600 
-                             focus:ring-blue-500 transition-colors"
-                  />
-                  <span>Include Answers</span>
-                </label>
-              </div>
-            </div>
-            
-            <div className="p-2">
-              <button
-                onClick={() => handleBulkAction('download', 'pdf')}
-                disabled={loading}
-                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700
-                         hover:bg-gray-50 rounded-lg transition-colors"
-              >
-                <FileText className="h-4 w-4 text-gray-500" />
-                <span className="flex-1 text-left text-sm">PDF Document</span>
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              </button>
-              <button
-                onClick={() => handleBulkAction('download', 'docx')}
-                disabled={loading}
-                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700
-                         hover:bg-gray-50 rounded-lg transition-colors"
-              >
-                <FileText className="h-4 w-4 text-gray-500" />
-                <span className="flex-1 text-left text-sm">Word Document</span>
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+  const renderEmptyState = () => (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="bg-white rounded-xl shadow-sm p-8 text-center"
+    >
+      <motion.div
+        initial={{ scale: 0.9 }}
+        animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 200, damping: 15 }}
+      >
+        <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">
+          No tasks found
+        </h3>
+        <p className="text-gray-500 mb-6">
+          Try adjusting your filters or create new tasks to get started.
+        </p>
+        <div className="flex items-center justify-center gap-4">
+          <ActionButton
+            onClick={() => setIsCreating(true)}
+            icon={<Plus className="w-5 h-5" />}
+            label="Create New Task"
+            variant="secondary"
+          />
+          <ActionButton
+            onClick={() => navigate('/generate-task')}
+            icon={<FileText className="w-5 h-5" />}
+            label="Generate Tasks"
+            variant="primary"
+          />
+        </div>
+      </motion.div>
+    </motion.div>
   );
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showDownloadMenu && !(event.target as Element).closest('.download-menu')) {
-        setShowDownloadMenu(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showDownloadMenu]);
+  // First, add a helper function to get all visible task IDs
+  const getVisibleTaskIds = () => {
+    return new Set(filteredAndSortedTasks.map(task => task.id));
+  };
 
   if (error) {
     return (
@@ -666,28 +723,6 @@ export const TaskLibrary = () => {
     );
   }
 
-  if (questions.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            No tasks found
-          </h2>
-          <p className="text-gray-600 mb-4">
-            Try adjusting your filters or create new tasks.
-          </p>
-          <button
-            onClick={() => navigate('/generate-task')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg
-                     hover:bg-blue-700 transition-colors"
-          >
-            Create New Task
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
@@ -697,7 +732,7 @@ export const TaskLibrary = () => {
           <div className="flex items-center gap-3">
             <Button
               variant="primary"
-              icon={<Plus className="w-5 h-5" />}
+              icon={<FileText className="w-5 h-5" />}
               onClick={() => navigate('/generate-task')}
             >
               Generate Task Sheet
@@ -713,124 +748,259 @@ export const TaskLibrary = () => {
         className="bg-white p-6 rounded-xl shadow-sm mb-6"
       >
         <div className="flex items-center justify-between gap-4 mb-4">
-          {/* Left side: Search and Selection Controls */}
-          <div className="flex items-center gap-4">
-            <div className="relative min-w-[300px]">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-              <input
-                type="text"
-                placeholder="Search tasks..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 w-full border rounded-xl focus:ring-2 focus:ring-blue-500 
-                         focus:border-blue-500 bg-gray-50"
-              />
+          {/* Search Bar */}
+          <div className="flex-1 max-w-2xl">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <div className="flex flex-wrap items-center gap-2 w-full pl-10 pr-4 py-2.5 border rounded-xl 
+                            focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 
+                            bg-white shadow-sm hover:border-gray-300 transition-all duration-200">
+                {searchTags.map(tag => (
+                  <motion.span
+                    key={tag}
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.8, opacity: 0 }}
+                    className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium 
+                             flex items-center gap-1.5 group hover:bg-blue-100 transition-colors"
+                  >
+                    {tag}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeSearchTag(tag);
+                      }}
+                      className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </motion.span>
+                ))}
+                <input
+                  type="text"
+                  value={currentSearch}
+                  onChange={(e) => setCurrentSearch(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder={searchTags.length === 0 ? "Search tasks..." : ""}
+                  className="flex-1 min-w-[120px] outline-none bg-transparent placeholder-gray-400
+                           text-gray-900 py-1"
+                />
+              </div>
             </div>
-
-            {questions.length > 0 && (
-              <>
-                <div className="h-6 w-px bg-gray-200" /> {/* Divider */}
-                <button
-                  onClick={() => {
-                    if (selectedTasks.size === questions.length) {
-                      setSelectedTasks(new Set());
-                    } else {
-                      setSelectedTasks(new Set(questions.map(q => q.id)));
-                    }
-                  }}
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  {selectedTasks.size === questions.length ? 'Deselect All' : 'Select All'}
-                </button>
-
-                {selectedTasks.size > 0 && (
-                  <>
-                    <div className="h-6 w-px bg-gray-200" /> {/* Divider */}
-                    <span className="text-sm text-gray-600">
-                      {selectedTasks.size} task(s) selected
-                    </span>
-                  </>
-                )}
-              </>
-            )}
           </div>
 
-          {/* Right side: View Controls */}
+          {/* Filter Button */}
           <div className="flex items-center gap-3">
             <Button
-              variant="ghost"
+              variant={selectedTasks.size > 0 ? "primary" : "ghost"}
+              size="sm"
+              icon={<CheckCircle2 className="w-4 h-4" />}
+              className="min-w-[100px]"
+              onClick={() => {
+                // If some tasks are selected, clear selection
+                // Otherwise, select all visible tasks
+                if (selectedTasks.size > 0) {
+                  setSelectedTasks(new Set());
+                } else {
+                  setSelectedTasks(getVisibleTaskIds());
+                }
+              }}
+            >
+              {selectedTasks.size > 0 ? (
+                <>
+                  Selected <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md text-xs">
+                    {selectedTasks.size}
+                  </span>
+                </>
+              ) : (
+                'Select All'
+              )}
+            </Button>
+
+            <Button
+              variant={showFilters ? "primary" : "ghost"}
               size="sm"
               icon={<Filter className="w-4 h-4" />}
+              className="min-w-[100px]"
               onClick={() => setShowFilters(!showFilters)}
             >
-              Filters
+              Filters {(filters.difficulties.size + filters.topics.size + filters.types.size) > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md text-xs">
+                  {filters.difficulties.size + filters.topics.size + filters.types.size}
+                </span>
+              )}
             </Button>
-            <div className="flex border rounded-lg p-1 bg-gray-50">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'grid' ? 'bg-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Grid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </div>
 
-        {/* Filters Panel */}
+        {/* Filter Panel */}
         <AnimatePresence>
           {showFilters && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="pt-4 border-t mb-4"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mb-6"
             >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <select
-                  value={filterSubject}
-                  onChange={(e) => setFilterSubject(e.target.value)}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 
-                           focus:border-blue-500 bg-gray-50"
-                >
-                  <option value="all">All Subjects</option>
-                  {subjects.map(subject => (
-                    <option key={subject} value={subject}>{subject}</option>
-                  ))}
-                </select>
+              <div className="bg-white rounded-xl shadow-sm border p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Difficulty Section */}
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                      Difficulty Level
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {['easy', 'medium', 'hard'].map(difficulty => (
+                        <button
+                          key={difficulty}
+                          onClick={() => toggleFilter('difficulties', difficulty)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200
+                            ${filters.difficulties.has(difficulty)
+                              ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                        >
+                          {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-                <select
-                  value={filterDifficulty}
-                  onChange={(e) => setFilterDifficulty(e.target.value)}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 
-                           focus:border-blue-500 bg-gray-50"
-                >
-                  <option value="all">All Difficulties</option>
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </select>
+                  {/* Topics Section */}
+                  <div className="space-y-3" ref={topicSearchRef}>
+                    <h3 className="text-sm font-medium text-gray-900">Topics</h3>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search topics..."
+                        value={topicSearch}
+                        onChange={(e) => setTopicSearch(e.target.value)}
+                        onFocus={() => setShowTopicDropdown(true)}
+                        className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 
+                                 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      {showTopicDropdown && (() => {
+                        const filteredOptions = getFilteredOptions(
+                          Array.from(new Set(questions.map(t => t.topic))),
+                          topicSearch,
+                          filters.topics
+                        );
+                        
+                        return filteredOptions.length > 0 ? (
+                          <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            <div className="p-2">
+                              {filteredOptions.map(topic => (
+                                <div
+                                  key={topic}
+                                  className="px-3 py-2 hover:bg-gray-50 rounded-md cursor-pointer text-gray-700"
+                                  onClick={() => toggleFilter('topics', topic)}
+                                >
+                                  {topic}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(filters.topics).map(topic => (
+                        <motion.span
+                          key={topic}
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0.8, opacity: 0 }}
+                          className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium 
+                                   flex items-center gap-1.5 group hover:bg-blue-100 transition-colors"
+                        >
+                          {topic}
+                          <button
+                            onClick={() => toggleFilter('topics', topic)}
+                            className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </motion.span>
+                      ))}
+                    </div>
+                  </div>
 
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 
-                           focus:border-blue-500 bg-gray-50"
-                >
-                  <option value="all">All Types</option>
-                  {types.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
+                  {/* Types Section */}
+                  <div className="space-y-3" ref={typeSearchRef}>
+                    <h3 className="text-sm font-medium text-gray-900">Question Types</h3>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search types..."
+                        value={typeSearch}
+                        onChange={(e) => setTypeSearch(e.target.value)}
+                        onFocus={() => setShowTypeDropdown(true)}
+                        className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 
+                                 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      {showTypeDropdown && (() => {
+                        const filteredOptions = getFilteredOptions(
+                          Array.from(new Set(questions.map(t => t.type))),
+                          typeSearch,
+                          filters.types
+                        );
+                        
+                        return filteredOptions.length > 0 ? (
+                          <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            <div className="p-2">
+                              {filteredOptions.map(type => (
+                                <div
+                                  key={type}
+                                  className="px-3 py-2 hover:bg-gray-50 rounded-md cursor-pointer text-gray-700"
+                                  onClick={() => toggleFilter('types', type)}
+                                >
+                                  {type}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(filters.types).map(type => (
+                        <motion.span
+                          key={type}
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0.8, opacity: 0 }}
+                          className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium 
+                                   flex items-center gap-1.5 group hover:bg-blue-100 transition-colors"
+                        >
+                          {type}
+                          <button
+                            onClick={() => toggleFilter('types', type)}
+                            className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </motion.span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {(filters.difficulties.size + filters.topics.size + filters.types.size) > 0 && (
+                  <div className="flex justify-between items-center mt-6 pt-6 border-t">
+                    <span className="text-sm text-gray-500 flex items-center gap-2">
+                      <Filter className="w-4 h-4" />
+                      {filters.difficulties.size + filters.topics.size + filters.types.size} active filters
+                    </span>
+                    <button
+                      onClick={() => setFilters({ topics: new Set(), difficulties: new Set(), types: new Set() })}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1.5"
+                    >
+                      <X className="w-4 h-4" />
+                      Clear all
+                    </button>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -840,34 +1010,22 @@ export const TaskLibrary = () => {
         <div className="flex justify-end pt-4 border-t">
           <div className="flex gap-2">
             <Button
-              variant="primary"
+              variant="ghost"
               size="sm"
               icon={<Plus className="w-4 h-4" />}
-              onClick={() => setIsCreating(!isCreating)}
+              onClick={() => setIsCreating(true)}
             >
               New Task
             </Button>
-            <div className="relative">
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<Download className="w-4 h-4" />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowDownloadMenu(!showDownloadMenu);
-                }}
-                disabled={selectedTasks.size === 0}
-              >
-                Download
-              </Button>
-              <AnimatePresence>
-                {showDownloadMenu && (
-                  <div onClick={(e) => e.stopPropagation()}>
-                    <DownloadMenu />
-                  </div>
-                )}
-              </AnimatePresence>
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Download className="w-4 h-4" />}
+              onClick={() => setShowDownloadModal(true)}
+              disabled={selectedTasks.size === 0}
+            >
+              Download
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -878,6 +1036,15 @@ export const TaskLibrary = () => {
             >
               Delete Selected
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Save className="w-4 h-4" />}
+              onClick={() => setShowSaveSheet(true)}
+              disabled={selectedTasks.size === 0}
+            >
+              Save as Sheet
+            </Button>
           </div>
         </div>
       </motion.div>
@@ -886,60 +1053,85 @@ export const TaskLibrary = () => {
       <AnimatePresence>
         {isCreating && (
           <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mb-8"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          >
+            <motion.div
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+              className="w-full max-w-3xl"
           >
             <TaskCreator
               onCreate={handleCreateTask}
               onCancel={() => setIsCreating(false)}
             />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Task Editing Modal */}
+      <AnimatePresence>
+        {editingTask && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          >
+            <motion.div
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+              className="w-full max-w-3xl"
+            >
+              <TaskEditor
+                task={editingTask}
+                onSave={handleSave}
+                onCancel={() => setEditingTask(null)}
+                mode="edit"
+              />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Tasks Display */}
       {isLoading ? (
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading tasks...</p>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
         </div>
-      ) : viewMode === 'grid' ? (
+      ) : error ? (
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+          <AlertTriangle className="mx-auto h-12 w-12 text-red-500 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Error loading tasks
+          </h3>
+          <p className="text-gray-500">{error}</p>
+        </div>
+      ) : (
+        <div>
+          {filteredAndSortedTasks.length > 0 ? (
+            viewMode === 'grid' ? (
         <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <AnimatePresence>
             {filteredAndSortedTasks.map(renderTaskCard)}
           </AnimatePresence>
         </motion.div>
       ) : (
+              <div className="space-y-4">
         <AnimatePresence>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            {renderTaskList()}
-          </motion.div>
+                  {filteredAndSortedTasks.map(renderTaskCard)}
         </AnimatePresence>
-      )}
-
-      {/* Empty State */}
-      {filteredAndSortedTasks.length === 0 && !isLoading && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center py-12"
-        >
-          <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <p className="text-gray-600 mb-4">No tasks found. Try adjusting your filters or create new tasks.</p>
-          <Button
-            variant="primary"
-            icon={<Plus className="w-5 h-5" />}
-            onClick={() => navigate('/generate-task')}
-          >
-            Create New Task
-          </Button>
-        </motion.div>
+              </div>
+            )
+          ) : (
+            renderEmptyState()
+          )}
+        </div>
       )}
 
       {/* Delete Confirmation Modal */}
@@ -965,8 +1157,7 @@ export const TaskLibrary = () => {
                   Confirm Deletion
                 </h3>
                 <p className="text-sm text-gray-500 mb-6">
-                  Are you sure you want to delete {selectedTasks.size} task(s)? This action cannot be undone.
-                  Deleted tasks will be permanently removed after 30 days.
+                  Are you sure you want to permanently delete {selectedTasks.size} task(s)? This action cannot be undone.
                 </p>
                 <div className="flex justify-end gap-3">
                   <button
@@ -978,17 +1169,36 @@ export const TaskLibrary = () => {
                   </button>
                   <button
                     onClick={confirmDelete}
-                    disabled={loading}
                     className="px-4 py-2 bg-red-600 text-white rounded-lg
                              hover:bg-red-700 transition-colors flex items-center gap-2"
                   >
-                    {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                     Delete Tasks
                   </button>
                 </div>
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Save Sheet Modal */}
+      <AnimatePresence>
+        {showSaveSheet && (
+          <SaveSheet
+            onSave={handleSaveAsSheet}
+            onClose={() => setShowSaveSheet(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sheet Download Modal */}
+      <AnimatePresence>
+        {showDownloadModal && (
+          <SheetDownloadModal
+            onClose={() => setShowDownloadModal(false)}
+            tasks={questions.filter(task => selectedTasks.has(task.id))}
+            sheetTitle="Selected Tasks"
+          />
         )}
       </AnimatePresence>
     </div>

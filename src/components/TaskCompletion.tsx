@@ -5,6 +5,7 @@ import { Clock, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
 import { InlineMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 import type { Question } from '../types/exam';
+import { checkAnswerWithAI } from '../services/answerChecker';
 
 interface LocationState {
   questions: Question[];
@@ -23,6 +24,7 @@ interface TaskResult {
     expectedAnswer: string;
     solution: string;
     isNumericallyEqual: boolean;
+    feedback: string;
   }[];
 }
 
@@ -37,34 +39,176 @@ const formatMathText = (text: string) => {
   });
 };
 
+// Helper functions for answer comparison
 const normalizeAnswer = (answer: string): string => {
-  // Remove spaces and convert to lowercase
-  return answer.replace(/\s+/g, '').toLowerCase()
-    // Convert fractions to decimals (e.g., "3/4" -> "0.75")
+  if (!answer) return '';
+  
+  return answer
+    .toLowerCase()
+    // Remove all whitespace
+    .replace(/\s+/g, '')
+    // Remove punctuation except decimal points in numbers
+    .replace(/[.,;?!'"-](?!\d)/g, '')
+    // Standardize mathematical operators
+    .replace(/[×⋅]/g, '*')
+    .replace(/÷/g, '/')
+    // Standardize scientific notation
+    .replace(/[eE][-+]?\d+/g, match => match.toLowerCase())
+    // Standardize fractions (e.g., "1/2" and "0.5" are equivalent)
     .replace(/(\d+)\/(\d+)/g, (_, num, den) => (Number(num) / Number(den)).toString())
-    // Remove unnecessary decimal zeros
-    .replace(/\.?0+$/, '');
+    // Remove units and their prefixes
+    .replace(/\s*(y|z|a|f|p|n|µ|u|m|c|d|da|h|k|M|G|T|P|E)?(m|g|l|L|s|mol|Hz|W|V|Ω|Pa|N|J|cd|lm|lx|Bq|Gy|Sv|kat|B)\b/g, '')
+    // Standardize boolean responses
+    .replace(/^(true|yes|correct|t|y)$/, 'true')
+    .replace(/^(false|no|incorrect|f|n)$/, 'false');
 };
 
-const checkMathAnswer = (userAnswer: string, correctAnswer: string): boolean => {
-  if (!userAnswer || !correctAnswer) return false;
+const isNumericallyEqual = (answer1: string, answer2: string): boolean => {
+  // Extract numbers, handling percentages and units
+  const extractNumber = (str: string) => {
+    // Remove spaces and convert percentages to decimals
+    str = str.replace(/\s+/g, '').replace(/%$/, '/100');
+    
+    // Extract number, handling negative signs and decimals
+    const match = str.match(/-?\d*\.?\d+(?:\/\d+)?(?:[eE][-+]?\d+)?/);
+    if (!match) return NaN;
+    
+    // Evaluate fractions if present
+    const num = match[0].includes('/') 
+      ? eval(match[0])  // Safe here as we've already validated it's a number
+      : Number(match[0]);
+      
+    return num;
+  };
+
+  const num1 = extractNumber(answer1);
+  const num2 = extractNumber(answer2);
   
+  if (!isNaN(num1) && !isNaN(num2)) {
+    // Handle different levels of precision
+    const relativeError = Math.abs((num1 - num2) / num2);
+    const absoluteError = Math.abs(num1 - num2);
+    
+    return (
+      relativeError < 0.005 || // Within 0.5% relative error
+      absoluteError < 0.05 || // Within 0.05 absolute error for small numbers
+      Math.round(num1 * 100) === Math.round(num2 * 100) // Same when rounded to 2 decimal places
+    );
+  }
+  return false;
+};
+
+const areAnswersEquivalent = (userAnswer: string, correctAnswer: string, type: string): boolean => {
+  // For essay-type questions, always return true but provide feedback
+  if (type === 'Essay' || type === 'Short Answer') {
+    try {
+      const criteria = JSON.parse(correctAnswer);
+      const wordCount = userAnswer.trim().split(/\s+/).length;
+      
+      // Check word count
+      if (wordCount < criteria.minWordCount || wordCount > criteria.maxWordCount) {
+        console.log(`Word count (${wordCount}) outside required range (${criteria.minWordCount}-${criteria.maxWordCount})`);
+      }
+
+      // Log required points for manual checking
+      criteria.requiredPoints.forEach((point: { point: string; weight: number }) => {
+        console.log(`Check for: ${point.point} (${point.weight}%)`);
+      });
+
+      return true; // Always accept the answer, actual grading should be done manually
+    } catch (e) {
+      console.error('Error parsing answer criteria:', e);
+      return true;
+    }
+  }
+
   const normalizedUser = normalizeAnswer(userAnswer);
   const normalizedCorrect = normalizeAnswer(correctAnswer);
 
-  // Check exact match first
+  // Direct match after normalization
   if (normalizedUser === normalizedCorrect) return true;
 
-  // Try numerical comparison for numeric answers
-  const userNum = Number(normalizedUser);
-  const correctNum = Number(normalizedCorrect);
+  // Type-specific checks
+  switch (type) {
+    case 'Multiple Choice':
+      // For multiple choice, only accept exact matches
+      return normalizedUser === normalizedCorrect;
+
+    case 'True/False':
+      // Handle various ways of expressing boolean answers
+      return (
+        normalizedUser === normalizedCorrect ||
+        (normalizedUser === 'true' && normalizedCorrect === 't') ||
+        (normalizedUser === 'false' && normalizedCorrect === 'f')
+      );
+
+    case 'Fill in the Blank':
+    case 'Short Answer':
+      // Check for numerical equality if both are numbers
+      if (isNumericallyEqual(normalizedUser, normalizedCorrect)) return true;
+      
+      // Check if answers are within an acceptable string similarity threshold
+      const similarity = calculateStringSimilarity(normalizedUser, normalizedCorrect);
+      return similarity > 0.85; // 85% similarity threshold
+
+    case 'Problem Solving':
+      // For numerical answers, check if they're equivalent
+      return isNumericallyEqual(normalizedUser, normalizedCorrect);
+
+    default:
+      return normalizedUser === normalizedCorrect;
+  }
+};
+
+// Levenshtein distance for string similarity
+const calculateStringSimilarity = (str1: string, str2: string): number => {
+  const track = Array(str2.length + 1).fill(null).map(() =>
+    Array(str1.length + 1).fill(null));
   
-  if (!isNaN(userNum) && !isNaN(correctNum)) {
-    // Allow for small floating-point differences
-    return Math.abs(userNum - correctNum) < 0.0001;
+  for (let i = 0; i <= str1.length; i += 1) {
+    track[0][i] = i;
+  }
+  for (let j = 0; j <= str2.length; j += 1) {
+    track[j][0] = j;
   }
 
-  return false;
+  for (let j = 1; j <= str2.length; j += 1) {
+    for (let i = 1; i <= str1.length; i += 1) {
+      const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      track[j][i] = Math.min(
+        track[j][i - 1] + 1,
+        track[j - 1][i] + 1,
+        track[j - 1][i - 1] + indicator
+      );
+    }
+  }
+
+  const distance = track[str2.length][str1.length];
+  const maxLength = Math.max(str1.length, str2.length);
+  return maxLength === 0 ? 1 : 1 - distance / maxLength;
+};
+
+// Update the checkAnswer function
+const checkAnswer = async (userAnswer: string, question: Question): Promise<boolean> => {
+  if (!question.answer) return false;
+
+  // Use basic checking for multiple choice and true/false
+  if (question.type === 'Multiple Choice' || question.type === 'True/False') {
+    return areAnswersEquivalent(userAnswer, question.answer, question.type);
+  }
+
+  // Use AI checking for other types
+  const result = await checkAnswerWithAI(
+    userAnswer,
+    question.answer,
+    question.type,
+    question.text
+  );
+
+  // Store feedback for display
+  question.explanation = result.feedback;
+  
+  return result.isCorrect;
 };
 
 export const TaskCompletion = () => {
@@ -133,10 +277,10 @@ export const TaskCompletion = () => {
     setIsSubmitting(true);
     const timeTaken = Math.floor((Date.now() - startTime.current) / 1000);
     
-    const questionResults = questions.map(question => {
+    const questionResults = await Promise.all(questions.map(async question => {
       const userAnswer = answers[question.id] || '';
       const expectedAnswer = question.answer || '';
-      const isCorrect = checkMathAnswer(userAnswer, expectedAnswer);
+      const isCorrect = await checkAnswer(userAnswer, question);
       
       return {
         questionId: question.id,
@@ -145,11 +289,10 @@ export const TaskCompletion = () => {
         userAnswer,
         expectedAnswer,
         solution: question.correctAnswer || '',
-        isNumericallyEqual: !isNaN(Number(normalizeAnswer(userAnswer))) && 
-                           !isNaN(Number(normalizeAnswer(expectedAnswer))) &&
-                           checkMathAnswer(userAnswer, expectedAnswer)
+        feedback: question.explanation || '',
+        isNumericallyEqual: isCorrect
       };
-    });
+    }));
 
     const correctCount = questionResults.filter(r => r.isCorrect).length;
     
@@ -256,6 +399,28 @@ export const TaskCompletion = () => {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+                {(question.type === 'Essay' || question.type === 'Short Answer') && (
+                  <div className="mt-2 text-sm text-gray-600">
+                    <p>Evaluation Criteria:</p>
+                    {(() => {
+                      try {
+                        const criteria = JSON.parse(question.answer || '');
+                        return (
+                          <ul className="list-disc pl-5">
+                            {criteria.requiredPoints.map((point: { point: string; weight: number }) => (
+                              <li key={point.point}>
+                                {point.point} ({point.weight}%)
+                              </li>
+                            ))}
+                            <li>Word count: {criteria.minWordCount}-{criteria.maxWordCount}</li>
+                          </ul>
+                        );
+                      } catch (e) {
+                        return <p>Criteria not available</p>;
+                      }
+                    })()}
                   </div>
                 )}
               </div>

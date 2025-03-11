@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useExamStore } from '../store/examStore';
-import { ArrowLeft, Save, Download, FileText, GripVertical, Edit2, X, Clock, ChevronDown, ChevronUp, Plus, PlusCircle, Trash2, CheckCircle, AlertTriangle, BookOpen } from 'lucide-react';
+import { ArrowLeft, Save, Download, FileText, GripVertical, Edit2, X, Clock, ChevronDown, ChevronUp, Plus, PlusCircle, Trash2, CheckCircle, AlertTriangle, BookOpen, Eye, EyeOff } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import { InlineMath, BlockMath } from 'react-katex';
 import { useLanguageStore } from '../store/languageStore';
@@ -18,6 +18,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { TaskCreator } from './TaskCreation';
 import { supabase } from '../services/supabase';
 import { v4 as uuidv4 } from 'uuid';
+import { SheetExportModal } from './SheetExportModal';
+import { SheetDownloadModal } from './SheetDownloadModal';
+import { SaveSheet } from './SaveSheet';
+import { TaskSheet } from '../types/supabase';
 
 const styles = `
   .solution-text {
@@ -122,6 +126,9 @@ export const TaskPreview = () => {
   });
   const { showToast } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [showSaveSheet, setShowSaveSheet] = useState(false);
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination || !result.draggableId) return;
@@ -193,12 +200,15 @@ export const TaskPreview = () => {
           topic: task.topic,
           difficulty: task.difficulty,
           correct_answer: task.correctAnswer,
-          answers: { answer: task.answer },
-          explanation: task.correctAnswer,
+          answers: task.answer ? { answer: task.answer } : null,
+          explanation: task.explanation || null,
+          context: task.context || null,
+          instructions: task.instructions || null,
+          learning_outcome: task.learningOutcome || null,
           user_id: user.id
         }));
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('tasks')
         .upsert(tasksToSave, { 
           onConflict: 'id',
@@ -208,6 +218,28 @@ export const TaskPreview = () => {
       if (error) throw error;
 
       showToast(`${selectedTasks.size} task(s) saved to library successfully`, 'success');
+      
+      // Optionally, you can also save the task sheet as a collection
+      if (tasksToSave.length > 1) {
+        const sheetId = uuidv4();
+        const { error: sheetError } = await supabase
+          .from('task_sheets')
+          .insert({
+            id: sheetId,
+            title: `Task Sheet - ${new Date().toLocaleDateString()}`,
+            description: `Task sheet with ${tasksToSave.length} tasks`,
+            user_id: user.id,
+            task_ids: tasksToSave.map(t => t.id),
+            created_at: new Date().toISOString()
+          });
+        
+        if (sheetError) {
+          console.error('Error saving task sheet:', sheetError);
+        } else {
+          showToast('Task sheet also saved to sheets library', 'success');
+        }
+      }
+      
       navigate('/library');
     } catch (error) {
       console.error('Error saving tasks:', error);
@@ -220,21 +252,12 @@ export const TaskPreview = () => {
     setIsCreating(false);
   };
 
-  const handleDownload = async (format: 'pdf' | 'docx') => {
-    try {
-      if (selectedTasks.size === 0) {
-        showToast('Please select tasks to download', 'error');
-        return;
-      }
-
-      const selectedTasksList = questions.filter(task => selectedTasks.has(task.id));
-      await downloadDocument(selectedTasksList, format, documentOptions);
-      setShowDownloadMenu(false);
-      showToast('Tasks downloaded successfully', 'success');
-    } catch (error) {
-      showToast('Failed to download tasks', 'error');
-      console.error('Download error:', error);
+  const handleExportClick = () => {
+    if (selectedTasks.size === 0) {
+      showToast('Please select tasks to export', 'error');
+      return;
     }
+    setShowExportModal(true);
   };
 
   const handleDelete = () => {
@@ -255,6 +278,93 @@ export const TaskPreview = () => {
       showToast('Failed to delete tasks', 'error');
       console.error('Delete error:', error);
     }
+  };
+
+  const handleSaveAsSheet = async (title: string, description?: string) => {
+    try {
+      setError(null);
+      
+      // Get the selected tasks or all tasks if none selected
+      const tasksToSave = selectedTasks.size > 0 
+        ? questions.filter(q => selectedTasks.has(q.id))
+        : questions;
+      
+      if (tasksToSave.length === 0) {
+        setError("No tasks selected to save");
+        return;
+      }
+      
+      // Save to Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setError("You must be logged in to save sheets");
+        return;
+      }
+      
+      // First, save all tasks to the tasks library
+      const tasksForLibrary = tasksToSave.map(task => ({
+        id: task.id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i) 
+          ? task.id 
+          : uuidv4(),
+        text: task.text,
+        type: task.type,
+        topic: task.topic,
+        difficulty: task.difficulty,
+        correct_answer: task.correctAnswer,
+        answers: task.answer ? { answer: task.answer } : null,
+        explanation: task.explanation || null,
+        context: task.context || null,
+        instructions: task.instructions || null,
+        learning_outcome: task.learningOutcome || null,
+        user_id: user.id
+      }));
+
+      // Upsert tasks to the tasks table
+      const { error: tasksError } = await supabase
+        .from('tasks')
+        .upsert(tasksForLibrary, { 
+          onConflict: 'id',
+          ignoreDuplicates: false 
+        });
+      
+      if (tasksError) throw tasksError;
+      
+      // Make sure we use the potentially new IDs for the sheet
+      const taskIds = tasksForLibrary.map(t => t.id);
+      
+      // Then save the sheet with references to those tasks
+      const sheetData = {
+        user_id: user.id,
+        title: title,
+        description: description || '',
+        tasks: taskIds
+      };
+      
+      const { error: saveError } = await supabase
+        .from('task_sheets')
+        .insert(sheetData);
+      
+      if (saveError) throw saveError;
+      
+      showToast("Sheet and tasks saved successfully", "success");
+      setShowSaveSheet(false);
+      
+      // Optionally navigate to the sheets library
+      navigate('/sheets');
+    } catch (err) {
+      console.error("Error saving sheet:", err);
+      setError(err instanceof Error ? err.message : "Failed to save sheet");
+      showToast("Failed to save sheet", "error");
+    }
+  };
+
+  const handleDownloadClick = () => {
+    if (selectedTasks.size === 0) {
+      showToast('Please select tasks to download', 'error');
+      return;
+    }
+    setShowDownloadModal(true);
   };
 
   const DownloadMenu = () => (
@@ -296,20 +406,59 @@ export const TaskPreview = () => {
 
       <div className="flex gap-2">
         <button
-          onClick={() => handleDownload('pdf')}
+          onClick={() => handleExportClick()}
           className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg
                    hover:bg-blue-700 transition-colors"
         >
-          PDF
-        </button>
-        <button
-          onClick={() => handleDownload('docx')}
-          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg
-                   hover:bg-blue-700 transition-colors"
-        >
-          DOCX
+          Export
         </button>
       </div>
+    </motion.div>
+  );
+
+  const renderEmptyState = () => (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="bg-white rounded-xl shadow-lg p-8 text-center"
+    >
+      <motion.div
+        initial={{ scale: 0.9 }}
+        animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 200, damping: 15 }}
+      >
+        <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          No Tasks Available
+        </h3>
+        <p className="text-gray-500 mb-8">
+          Get started by creating a new task or generating a task sheet
+        </p>
+        <div className="flex items-center justify-center gap-4">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setIsCreating(true)}
+            className="px-6 py-3 bg-white text-gray-700 border-2 border-gray-200 
+                     rounded-xl hover:bg-gray-50 transition-all duration-200 
+                     flex items-center gap-2 font-medium shadow-sm"
+          >
+            <Plus className="w-5 h-5" />
+            Create Task
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate('/generate-task')}
+            className="px-6 py-3 bg-blue-600 text-white rounded-xl 
+                     hover:bg-blue-700 transition-all duration-200 
+                     flex items-center gap-2 font-medium shadow-md"
+          >
+            <FileText className="w-5 h-5" />
+            Generate Task Sheet
+          </motion.button>
+        </div>
+      </motion.div>
     </motion.div>
   );
 
@@ -329,26 +478,7 @@ export const TaskPreview = () => {
           </div>
 
           <div className="text-center py-12">
-            <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <p className="text-gray-600 mb-6">No tasks found. Create new tasks or generate a task sheet.</p>
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={() => setIsCreating(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white 
-                         rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-                Create Task
-              </button>
-              <button
-                onClick={() => navigate('/generate-task')}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white 
-                         rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <PlusCircle className="w-5 h-5" />
-                Generate Task Sheet
-              </button>
-            </div>
+            {renderEmptyState()}
           </div>
 
           {/* Task Creation Modal */}
@@ -444,26 +574,23 @@ export const TaskPreview = () => {
               Delete
             </button>
 
-            <div className="relative">
-              <button
-                onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-                className="flex items-center gap-2 px-4 py-2 text-gray-700
-                         hover:bg-gray-100 rounded-lg transition-colors"
-                disabled={selectedTasks.size === 0}
-              >
-                <Download className="w-5 h-5" />
-                Download
-              </button>
-              {showDownloadMenu && <DownloadMenu />}
-            </div>
+            <button
+              onClick={handleDownloadClick}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg
+                       hover:bg-green-700 transition-colors"
+              disabled={selectedTasks.size === 0}
+            >
+              <Download className="w-5 h-5" />
+              Download
+            </button>
 
             <button
-              onClick={handleSaveComplete}
-              className="flex items-center gap-2 px-4 py-2 text-gray-700
-                       hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <Save className="w-5 h-5" />
-              Save to Library
+                onClick={() => setShowSaveSheet(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg
+                         hover:bg-blue-700 transition-colors"
+              >
+                <Save className="w-5 h-5" />
+                Save as Sheet
             </button>
           </div>
         </div>
@@ -551,16 +678,20 @@ export const TaskPreview = () => {
                               {/* Expanded Content */}
                               {expandedTasks.has(task.id) && (
                                 <div className="mt-4 space-y-4 animate-fadeIn">
-                                  {task.correctAnswer && (
-                                    <div className="pl-4 border-l-4 border-green-500">
-                                      <h4 className="text-sm font-semibold text-gray-700 mb-1">
-                                        {t('tasks.solution')}:
-                                      </h4>
-                                      <div className="text-gray-600 whitespace-pre-line solution-text">
-                                        {formatMathText(task.correctAnswer)}
-                                      </div>
+                                  <div className="pl-4 border-l-4 border-green-500">
+                                    <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                                      {t('tasks.solution')}:
+                                    </h4>
+                                    <div className="text-gray-600 whitespace-pre-line solution-text">
+                                      {task.explanation ? (
+                                        formatMathText(task.explanation)
+                                      ) : task.correctAnswer ? (
+                                        formatMathText(task.correctAnswer)
+                                      ) : (
+                                        <span className="text-gray-500">No solution available</span>
+                                      )}
                                     </div>
-                                  )}
+                                  </div>
 
                                   {task.answer && (
                                     <div className="pl-4 border-l-4 border-blue-500">
@@ -673,7 +804,7 @@ export const TaskPreview = () => {
                   Confirm Deletion
                 </h3>
                 <p className="text-sm text-gray-500 mb-6">
-                  Are you sure you want to delete {selectedTasks.size} task(s)? This action cannot be undone.
+                  Are you sure you want to permanently delete {selectedTasks.size} task(s)? This action cannot be undone.
                 </p>
                 <div className="flex justify-end gap-3">
                   <button
@@ -694,6 +825,38 @@ export const TaskPreview = () => {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Save Sheet Modal */}
+      <AnimatePresence>
+        {showSaveSheet && (
+          <SaveSheet
+            onSave={handleSaveAsSheet}
+            onClose={() => setShowSaveSheet(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Download Modal */}
+      <AnimatePresence>
+        {showDownloadModal && (
+          <SheetDownloadModal
+            onClose={() => setShowDownloadModal(false)}
+            tasks={questions.filter(task => selectedTasks.has(task.id))}
+            sheetTitle="Selected Tasks"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Export Modal */}
+      <AnimatePresence>
+        {showExportModal && (
+          <SheetExportModal
+            onClose={() => setShowExportModal(false)}
+            tasks={questions.filter(task => selectedTasks.has(task.id))}
+            sheetTitle="Selected Tasks"
+          />
         )}
       </AnimatePresence>
     </>

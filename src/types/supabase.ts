@@ -111,6 +111,7 @@ export interface TaskSheet {
   title: string;
   description?: string;
   tasks: string[]; // Array of task IDs
+  tags?: string[];
   created_at: string;
   updated_at: string;
 }

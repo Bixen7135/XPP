@@ -356,3 +356,49 @@ CREATE POLICY "Users can delete own task sheets"
 
 -- Create indexes
 CREATE INDEX task_sheets_user_id_idx ON task_sheets(user_id);
+-- Modify the task_sheets table
+ALTER TABLE task_sheets 
+ALTER COLUMN tasks SET DEFAULT '{}';
+
+-- Update existing rows that might have NULL tasks
+UPDATE task_sheets 
+SET tasks = '{}'::uuid[] 
+WHERE tasks IS NULL;
+
+-- Add NOT NULL constraint
+ALTER TABLE task_sheets 
+ALTER COLUMN tasks SET NOT NULL;
+
+-- Drop the existing check constraint if it exists
+ALTER TABLE task_sheets 
+DROP CONSTRAINT IF EXISTS task_sheets_tasks_check;
+
+-- Add a new check constraint
+ALTER TABLE task_sheets 
+ADD CONSTRAINT task_sheets_tasks_check 
+CHECK (tasks IS NOT NULL);
+
+-- Add an index for better performance
+CREATE INDEX task_sheets_tasks_gin_idx ON task_sheets USING gin(tasks);
+
+-- Add a trigger to validate task IDs
+CREATE OR REPLACE FUNCTION validate_task_ids()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Check if all task IDs exist in the tasks table
+  IF EXISTS (
+    SELECT 1
+    FROM unnest(NEW.tasks) AS task_id
+    LEFT JOIN tasks ON tasks.id = task_id
+    WHERE tasks.id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Invalid task ID found in tasks array';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER validate_task_sheet_tasks
+BEFORE INSERT OR UPDATE ON task_sheets
+FOR EACH ROW
+EXECUTE FUNCTION validate_task_ids();

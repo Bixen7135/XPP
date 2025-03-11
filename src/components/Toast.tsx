@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
 
-export const Toast = ({ message, type, duration = 3000 }) => {
+type ToastType = 'success' | 'error';
+
+interface ToastProps {
+  message: string;
+  type: ToastType;
+  duration?: number;
+}
+
+export const Toast = ({ message, type, duration = 3000 }: ToastProps) => {
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
@@ -21,9 +29,9 @@ export const Toast = ({ message, type, duration = 3000 }) => {
 };
 
 export const useToast = () => {
-  const [toast, setToast] = useState(null);
+  const [toast, setToast] = useState<ToastProps | null>(null);
 
-  const showToast = (message, type) => {
+  const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
   };
 
