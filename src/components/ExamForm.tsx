@@ -47,178 +47,193 @@ const ExamForm = () => {
 
   return (
     <PageLayout maxWidth="xl">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-4xl mx-auto"
-      >
-        <motion.button
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          onClick={() => navigate('/generate-exam')}
-          className="flex items-center text-gray-600 hover:text-gray-900 mb-6"
-        >
-          <ArrowLeft className="h-5 w-5 mr-2" />
-          Back to Exam Types
-        </motion.button>
+      <div className="w-full">
+        <div className="max-w-4xl mx-auto">
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            onClick={() => navigate('/generate-exam')}
+            className="flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 mb-6"
+          >
+            <ArrowLeft className="h-5 w-5 mr-2" />
+            Back to Exam Types
+          </motion.button>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-2xl shadow-lg p-8"
-        >
-          <div className="flex items-center gap-4 mb-8 pb-6 border-b">
-            <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <GraduationCap className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Generate {type?.toUpperCase()} Exam
-              </h1>
-              <p className="text-gray-600 mt-1">
-                Customize your exam settings below
-              </p>
-            </div>
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center mb-12"
+          >
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Generate {type?.toUpperCase()} Exam
+            </h1>
+            <p className="text-lg text-gray-600 dark:text-gray-400">
+              Customize your exam settings below
+            </p>
+          </motion.div>
 
-          <form onSubmit={handleSubmit} className="space-y-8">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Sections
-              </label>
-              <div className="grid grid-cols-2 gap-4">
-                {getExamSections(type).map((section) => (
-                  <label key={section} className="relative flex items-center p-4 rounded-xl border-2 cursor-pointer
-                                               hover:border-blue-500 transition-colors">
-                    <input
-                      type="checkbox"
-                      name="sections"
-                      value={section}
-                      className="peer sr-only"
-                    />
-                    <div className="peer-checked:border-blue-500 peer-checked:bg-blue-50 absolute inset-0 rounded-xl border-2 pointer-events-none"></div>
-                    <div className="relative z-10 flex items-center">
-                      <CheckCircle2 className="w-5 h-5 text-blue-600 mr-3 opacity-0 peer-checked:opacity-100" />
-                      <span className="text-gray-700 peer-checked:text-blue-600">{section}</span>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white dark:bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-sm dark:shadow-gray-900/50 p-6 border border-gray-200/50 dark:border-gray-700/50"
+          >
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Sections
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {getExamSections(type).map((section) => (
+                    <label
+                      key={section}
+                      className="relative flex items-start p-3 rounded-xl border border-gray-200 dark:border-gray-700
+                               bg-white dark:bg-gray-900 cursor-pointer
+                               hover:bg-gray-50 dark:hover:bg-gray-800
+                               transition-colors duration-150"
+                    >
+                      <input
+                        type="checkbox"
+                        name="sections"
+                        value={section}
+                        className="h-4 w-4 mt-1 rounded border-gray-300 dark:border-gray-600
+                                 text-blue-600 dark:text-blue-400
+                                 focus:ring-blue-500 dark:focus:ring-blue-400"
+                      />
+                      <span className="ml-3 text-sm text-gray-900 dark:text-gray-300">
+                        {section}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Topics
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {getExamTopics(type).map((topic) => (
+                    <label
+                      key={topic}
+                      className="relative flex items-start p-3 rounded-xl border border-gray-200 dark:border-gray-700
+                               bg-white dark:bg-gray-900 cursor-pointer
+                               hover:bg-gray-50 dark:hover:bg-gray-800
+                               transition-colors duration-150"
+                    >
+                      <input
+                        type="checkbox"
+                        name="topics"
+                        value={topic}
+                        className="h-4 w-4 mt-1 rounded border-gray-300 dark:border-gray-600
+                                 text-blue-600 dark:text-blue-400
+                                 focus:ring-blue-500 dark:focus:ring-blue-400"
+                      />
+                      <span className="ml-3 text-sm text-gray-900 dark:text-gray-300">
+                        {topic}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Difficulty Distribution
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDifficulty('beginner')}
+                    className={`p-4 rounded-xl border text-left transition-colors duration-150
+                              ${selectedDifficulty === 'beginner'
+                                ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                              }
+                              bg-white dark:bg-gray-900`}
+                  >
+                    <div className="font-medium mb-1 text-gray-900 dark:text-white">Beginner</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      Easy: 60% / Medium: 30% / Hard: 10%
                     </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Topics
-              </label>
-              <div className="grid grid-cols-2 gap-4">
-                {getExamTopics(type).map((topic) => (
-                  <label key={topic} className="relative flex items-center p-4 rounded-xl border-2 cursor-pointer
-                                             hover:border-blue-500 transition-colors">
-                    <input
-                      type="checkbox"
-                      name="topics"
-                      value={topic}
-                      className="peer sr-only"
-                    />
-                    <div className="peer-checked:border-blue-500 peer-checked:bg-blue-50 absolute inset-0 rounded-xl border-2 pointer-events-none"></div>
-                    <div className="relative z-10 flex items-center">
-                      <CheckCircle2 className="w-5 h-5 text-blue-600 mr-3 opacity-0 peer-checked:opacity-100" />
-                      <span className="text-gray-700 peer-checked:text-blue-600">{topic}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDifficulty('balanced')}
+                    className={`p-4 rounded-xl border text-left transition-colors duration-150
+                              ${selectedDifficulty === 'balanced'
+                                ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                              }
+                              bg-white dark:bg-gray-900`}
+                  >
+                    <div className="font-medium mb-1 text-gray-900 dark:text-white">Balanced</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      Easy: 30% / Medium: 40% / Hard: 30%
                     </div>
-                  </label>
-                ))}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDifficulty('advanced')}
+                    className={`p-4 rounded-xl border text-left transition-colors duration-150
+                              ${selectedDifficulty === 'advanced'
+                                ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                              }
+                              bg-white dark:bg-gray-900`}
+                  >
+                    <div className="font-medium mb-1 text-gray-900 dark:text-white">Advanced</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      Easy: 10% / Medium: 40% / Hard: 50%
+                    </div>
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Difficulty Distribution
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+                <label className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    name="includeAnswers"
+                    value="true"
+                    className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 
+                             text-blue-600 dark:text-blue-400 
+                             focus:ring-blue-500 dark:focus:ring-blue-400"
+                  />
+                  <span className="text-gray-700 dark:text-gray-300">Include answers and explanations</span>
+                </label>
+              </div>
+
+              <div className="flex justify-end pt-4">
                 <button
-                  type="button"
-                  onClick={() => setSelectedDifficulty('beginner')}
-                  className={`p-4 rounded-lg border-2 text-left ${
-                    selectedDifficulty === 'beginner'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                  type="submit"
+                  disabled={loading}
+                  className="inline-flex items-center px-6 py-3 rounded-xl
+                           bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600
+                           text-white font-medium
+                           focus:outline-none focus:ring-2 focus:ring-offset-2 
+                           focus:ring-blue-500 dark:focus:ring-blue-400
+                           transition-colors duration-150
+                           disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <div className="font-medium mb-1">Beginner</div>
-                  <div className="text-sm text-gray-600">
-                    Easy: 60% / Medium: 30% / Hard: 10%
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedDifficulty('balanced')}
-                  className={`p-4 rounded-lg border-2 text-left ${
-                    selectedDifficulty === 'balanced'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="font-medium mb-1">Balanced</div>
-                  <div className="text-sm text-gray-600">
-                    Easy: 30% / Medium: 40% / Hard: 30%
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedDifficulty('advanced')}
-                  className={`p-4 rounded-lg border-2 text-left ${
-                    selectedDifficulty === 'advanced'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="font-medium mb-1">Advanced</div>
-                  <div className="text-sm text-gray-600">
-                    Easy: 10% / Medium: 40% / Hard: 50%
-                  </div>
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Settings2 className="w-5 h-5 mr-2" />
+                      Generate Exam
+                    </>
+                  )}
                 </button>
               </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-4">
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  name="includeAnswers"
-                  value="true"
-                  className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-gray-700">Include answers and explanations</span>
-              </label>
-            </div>
-
-            <div className="flex justify-end pt-6">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex items-center justify-center px-8 py-4 bg-blue-600 text-white rounded-xl
-                         font-semibold hover:bg-blue-700 transition-all duration-200 transform hover:scale-105
-                         shadow-lg hover:shadow-xl disabled:bg-blue-400 disabled:cursor-not-allowed
-                         disabled:transform-none min-w-[180px]"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin mr-2 h-5 w-5" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Settings2 className="h-5 w-5 mr-2" />
-                    Generate Exam
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </motion.div>
-      </motion.div>
+            </form>
+          </motion.div>
+        </div>
+      </div>
     </PageLayout>
   );
 };

@@ -145,10 +145,10 @@ export const ExamPreview = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6 bg-white rounded-xl shadow-sm p-4">
+      <div className="flex items-center justify-between mb-6 bg-gray-800 rounded-xl shadow-sm p-4">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center text-gray-600 hover:text-gray-900"
+          className="flex items-center text-gray-300 hover:text-white"
         >
           <ArrowLeft className="h-5 w-5 mr-2" />
           {t('exam.back')}
@@ -157,8 +157,8 @@ export const ExamPreview = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-            className="flex items-center gap-2 px-4 py-2 text-gray-700
-                     hover:bg-gray-100 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-gray-300
+                     hover:bg-gray-700 rounded-lg transition-colors"
           >
             <Download className="w-5 h-5" />
             Download
@@ -178,7 +178,7 @@ export const ExamPreview = () => {
       <DragDropContext onDragEnd={handleDragEnd}>
         {organizedQuestions.map((group, groupIndex) => (
           <div key={group.section} className="mb-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
+            <h2 className="text-xl font-bold text-gray-100 mb-4">
               {group.section}
             </h2>
             
@@ -199,7 +199,7 @@ export const ExamPreview = () => {
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}
-                          className="bg-white rounded-xl shadow-sm overflow-hidden"
+                          className="bg-gray-800 rounded-xl shadow-sm overflow-hidden"
                         >
                           <div className="p-6">
                             <div className="flex items-start gap-4">
@@ -208,7 +208,7 @@ export const ExamPreview = () => {
                               </div>
                               
                               <div className="flex-1">
-                                <div className="text-lg text-gray-900 mb-4">
+                                <div className="text-lg text-gray-100 mb-4">
                                   {formatMathText(question.text)}
                                 </div>
                                 
@@ -217,10 +217,10 @@ export const ExamPreview = () => {
                                     {Array.isArray(question.answers) && 
                                       question.answers.map((answer, i) => (
                                         <div key={i} className="flex items-center gap-2">
-                                          <span className="text-sm font-medium">
+                                          <span className="text-sm font-medium text-gray-300">
                                             {String.fromCharCode(65 + i)}.
                                           </span>
-                                          <span>{formatMathText(answer)}</span>
+                                          <span className="text-gray-300">{formatMathText(answer)}</span>
                                         </div>
                                       ))
                                     }
@@ -229,7 +229,7 @@ export const ExamPreview = () => {
                                 
                                 <button
                                   onClick={() => toggleTask(question.id)}
-                                  className="mt-4 text-gray-500 hover:text-gray-700 
+                                  className="mt-4 text-gray-400 hover:text-gray-200 
                                            flex items-center gap-1"
                                 >
                                   {expandedTasks.has(question.id) ? (
@@ -244,10 +244,10 @@ export const ExamPreview = () => {
                                   <div className="mt-4 space-y-4">
                                     {question.answer && (
                                       <div className="pl-4 border-l-4 border-blue-500">
-                                        <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                                        <h4 className="text-sm font-semibold text-gray-300 mb-1">
                                           Answer:
                                         </h4>
-                                        <div className="text-gray-600">
+                                        <div className="text-gray-400">
                                           {formatMathText(question.answer)}
                                         </div>
                                       </div>
@@ -255,10 +255,10 @@ export const ExamPreview = () => {
                                     
                                     {question.correctAnswer && (
                                       <div className="pl-4 border-l-4 border-green-500">
-                                        <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                                        <h4 className="text-sm font-semibold text-gray-300 mb-1">
                                           Solution:
                                         </h4>
-                                        <div className="text-gray-600">
+                                        <div className="text-gray-400">
                                           {formatMathText(question.correctAnswer)}
                                         </div>
                                       </div>
@@ -269,7 +269,7 @@ export const ExamPreview = () => {
 
                               <button
                                 onClick={() => handleEdit(question)}
-                                className="p-2 text-gray-400 hover:text-gray-600"
+                                className="p-2 text-gray-400 hover:text-gray-200"
                               >
                                 <Edit2 className="h-5 w-5" />
                               </button>

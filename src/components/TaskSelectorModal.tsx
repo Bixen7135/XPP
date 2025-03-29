@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { X, Search, Check, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Search, Check, Filter, Loader2, ChevronUp, ChevronDown, Edit2, AlertTriangle, FileText, SortAsc, SortDesc } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Question } from '../types/exam';
 import { Button } from './common/Button';
 import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
+import { TaskEditModal } from './TaskEditModal';
+import { TaskFilters } from './TaskFilters';
 
 interface TaskSelectorModalProps {
   onClose: () => void;
@@ -13,118 +15,234 @@ interface TaskSelectorModalProps {
   existingTaskIds: string[];
 }
 
+
+type SortKey = 'date' | 'topic' | 'difficulty' | 'type';
+
 export const TaskSelectorModal = ({ onClose, onSelect, existingTaskIds }: TaskSelectorModalProps) => {
   const [tasks, setTasks] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
+  const [editingTask, setEditingTask] = useState<Question | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [showFilterTags, setShowFilterTags] = useState(false);
-  const [filters, setFilters] = useState({
-    difficulty: new Set<string>(),
-    topic: new Set<string>(),
-    type: new Set<string>(),
-  });
-  const [topicSearch, setTopicSearch] = useState('');
-  const [typeSearch, setTypeSearch] = useState('');
-  const [showTopicDropdown, setShowTopicDropdown] = useState(false);
-  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
-  const [selectedTopicTags, setSelectedTopicTags] = useState<Set<string>>(new Set());
-  const [selectedTypeTags, setSelectedTypeTags] = useState<Set<string>>(new Set());
-
-  // Extract unique values for filters
-  const uniqueTopics = [...new Set(tasks.map(task => task.topic))];
-  const uniqueTypes = [...new Set(tasks.map(task => task.type))];
-  const difficulties = ['easy', 'medium', 'hard'];
-
-  const filteredTasks = tasks.filter(task => {
-    const matchesSearch = 
-      task.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.topic.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesDifficulty = 
-      filters.difficulty.size === 0 || filters.difficulty.has(task.difficulty);
-    
-    const matchesTopic = 
-      filters.topic.size === 0 || filters.topic.has(task.topic);
-    
-    const matchesType = 
-      filters.type.size === 0 || filters.type.has(task.type);
-
-    return matchesSearch && matchesDifficulty && matchesTopic && matchesType;
-  });
-
+  const [topics, setTopics] = useState<string[]>([]);
+  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
+  const [difficulties, setDifficulties] = useState<string[]>([]);
+  const [selectedDifficulties, setSelectedDifficulties] = useState<Set<string>>(new Set());
+  const [types, setTypes] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  const [allTasks, setAllTasks] = useState<Question[]>([]);
+  const [sortBy, setSortBy] = useState<SortKey>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  
   useEffect(() => {
     loadTasks();
   }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!(event.target as HTMLElement).closest('.dropdown-container')) {
-        setShowTopicDropdown(false);
-        setShowTypeDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
+  
   const loadTasks = async () => {
     try {
       setLoading(true);
+      setError(null);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .not('id', 'in', `(${existingTaskIds.join(',')})`)
-        .order('created_at', { ascending: false });
-
+        .eq('user_id', user.id);
+        
       if (error) throw error;
-      setTasks(data || []);
-    } catch (error) {
-      console.error('Error loading tasks:', error);
+      
+      const tasks = data.map(task => ({
+        id: task.id,
+        text: task.text,
+        type: task.type,
+        topic: task.topic,
+        difficulty: task.difficulty,
+        correctAnswer: task.correct_answer,
+        answer: task.answers?.answer || null,
+        context: task.context,
+        instructions: task.instructions,
+        learningOutcome: task.learning_outcome
+      }));
+      
+      
+      const filteredTasks = tasks.filter(task => !existingTaskIds.includes(task.id));
+      
+      setAllTasks(filteredTasks);
+      setTasks(filteredTasks);
+      
+      
+      setTopics([...new Set(filteredTasks.map(t => t.topic))].filter(Boolean));
+      setDifficulties([...new Set(filteredTasks.map(t => t.difficulty))].filter(Boolean));
+      setTypes([...new Set(filteredTasks.map(t => t.type))].filter(Boolean));
+      
+    } catch (err) {
+      console.error('Error loading tasks:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load tasks');
     } finally {
       setLoading(false);
     }
   };
-
-  const toggleFilter = (type: 'difficulty' | 'topic' | 'type', value: string) => {
-    setFilters(prev => {
-      const newFilters = { ...prev };
-      const filterSet = new Set(prev[type]);
-      
-      if (filterSet.has(value)) {
-        filterSet.delete(value);
+  
+  const toggleTask = (taskId: string) => {
+    const newSelectedTasks = new Set(selectedTasks);
+    if (newSelectedTasks.has(taskId)) {
+      newSelectedTasks.delete(taskId);
+    } else {
+      newSelectedTasks.add(taskId);
+    }
+    setSelectedTasks(newSelectedTasks);
+  };
+  
+  const toggleTopic = (topic: string) => {
+    const newSelectedTopics = new Set(selectedTopics);
+    if (newSelectedTopics.has(topic)) {
+      newSelectedTopics.delete(topic);
+    } else {
+      newSelectedTopics.add(topic);
+    }
+    setSelectedTopics(newSelectedTopics);
+  };
+  
+  const toggleDifficulty = (difficulty: string) => {
+    const newSelectedDifficulties = new Set(selectedDifficulties);
+    if (newSelectedDifficulties.has(difficulty)) {
+      newSelectedDifficulties.delete(difficulty);
+    } else {
+      newSelectedDifficulties.add(difficulty);
+    }
+    setSelectedDifficulties(newSelectedDifficulties);
+  };
+  
+  const toggleType = (type: string) => {
+    const newSelectedTypes = new Set(selectedTypes);
+    if (newSelectedTypes.has(type)) {
+      newSelectedTypes.delete(type);
+    } else {
+      newSelectedTypes.add(type);
+    }
+    setSelectedTypes(newSelectedTypes);
+  };
+  
+  const handleAddTasks = () => {
+    const selectedTaskObjects = allTasks.filter(task => selectedTasks.has(task.id));
+    onSelect(selectedTaskObjects);
+    onClose();
+  };
+  
+  
+  const toggleSort = (field: SortKey) => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortDirection('asc');
+    }
+  };
+  
+  
+  const filteredTasks = useMemo(() => {
+    return allTasks
+      .filter(task => {
+        
+        if (searchQuery) {
+          const query = searchQuery.toLowerCase();
+          if (!task.text.toLowerCase().includes(query)) {
+            return false;
+          }
+        }
+        
+        
+        if (selectedTopics.size > 0 && !selectedTopics.has(task.topic)) {
+          return false;
+        }
+        
+        
+        if (selectedDifficulties.size > 0 && !selectedDifficulties.has(task.difficulty)) {
+          return false;
+        }
+        
+        
+        if (selectedTypes.size > 0 && !selectedTypes.has(task.type)) {
+          return false;
+        }
+        
+        return true;
+      })
+      .sort((a, b) => {
+        let comparison = 0;
+        switch (sortBy) {
+          case 'topic':
+            comparison = a.topic.localeCompare(b.topic);
+            break;
+          case 'difficulty':
+            const difficultyOrder: Record<string, number> = { 'easy': 0, 'medium': 1, 'hard': 2 };
+            comparison = (difficultyOrder[a.difficulty] || 0) - (difficultyOrder[b.difficulty] || 0);
+            break;
+          case 'type':
+            comparison = a.type.localeCompare(b.type);
+            break;
+          case 'date':
+            comparison = a.id.localeCompare(b.id);
+            break;
+        }
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+  }, [allTasks, searchQuery, selectedTopics, selectedDifficulties, selectedTypes, sortBy, sortDirection]);
+  
+  const toggleDetails = (e: React.MouseEvent, taskId: string) => {
+    e.stopPropagation();
+    setExpandedDetails(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
       } else {
-        filterSet.add(value);
-        setShowFilterTags(true);
+        newSet.add(taskId);
       }
-      
-      newFilters[type] = filterSet;
-      return newFilters;
+      return newSet;
     });
   };
 
-  const filteredTopics = uniqueTopics
-    .filter(topic => 
-      !filters.topic.has(topic) &&
-      topic.toLowerCase().includes(topicSearch.toLowerCase())
-    );
-
-  const filteredTypes = uniqueTypes
-    .filter(type => 
-      !filters.type.has(type) &&
-      type.toLowerCase().includes(typeSearch.toLowerCase())
-    );
-
-  const handleSelect = () => {
-    const selectedTasksList = tasks.filter(task => selectedTasks.has(task.id));
-    onSelect(selectedTasksList);
+  const handleEdit = (e: React.MouseEvent, task: Question) => {
+    e.stopPropagation();
+    setEditingTask(task);
   };
 
-  const getFilterLabel = (type: string, value: string) => {
-    if (type === 'difficulty') return value.charAt(0).toUpperCase() + value.slice(1);
-    return value;
+  const handleTaskUpdate = async (updatedTask: Question) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({
+          text: updatedTask.text,
+          type: updatedTask.type,
+          topic: updatedTask.topic,
+          difficulty: updatedTask.difficulty,
+          correct_answer: updatedTask.correctAnswer,
+          answers: updatedTask.answer ? { answer: updatedTask.answer } : null,
+          context: updatedTask.context,
+          instructions: updatedTask.instructions,
+          learning_outcome: updatedTask.learningOutcome
+        })
+        .eq('id', updatedTask.id);
+
+      if (error) throw error;
+
+      
+      setAllTasks(prevTasks => 
+        prevTasks.map(task => 
+          task.id === updatedTask.id ? updatedTask : task
+        )
+      );
+
+      setEditingTask(null);
+    } catch (err) {
+      console.error('Error updating task:', err);
+      
+    }
   };
 
   const formatMathText = (text: string) => {
@@ -149,342 +267,243 @@ export const TaskSelectorModal = ({ onClose, onSelect, existingTaskIds }: TaskSe
     });
   };
 
-  const handleTagsConfirm = (type: 'topic' | 'type') => {
-    const selectedTags = type === 'topic' ? selectedTopicTags : selectedTypeTags;
-    selectedTags.forEach(tag => toggleFilter(type, tag));
-    if (type === 'topic') {
-      setSelectedTopicTags(new Set());
-      setTopicSearch('');
-      setShowTopicDropdown(false);
-    } else {
-      setSelectedTypeTags(new Set());
-      setTypeSearch('');
-      setShowTypeDropdown(false);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-8 max-w-2xl w-full mx-4">
+          <div className="flex justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-8 max-w-2xl w-full mx-4">
+          <div className="flex flex-col items-center text-center">
+            <AlertTriangle className="w-12 h-12 text-red-500 dark:text-red-400 mb-4" />
+            <p className="text-gray-600 dark:text-gray-300 mb-4">{error}</p>
+            <Button
+              variant="primary"
+              onClick={loadTasks}
+              className="dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+            >
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-    >
-      <motion.div
-        initial={{ scale: 0.95 }}
-        animate={{ scale: 1 }}
-        className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[80vh] flex flex-col"
-      >
-        <div className="p-6 border-b">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Select Tasks</h2>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+        
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Select Tasks</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Choose tasks to add to your sheet
+            </p>
           </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-full
+                     hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search tasks..."
-                className="w-full pl-10 pr-4 py-2 border rounded-lg"
-              />
+        
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex flex-wrap items-center gap-4">
+            
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search tasks..."
+                  className="w-full pl-12 pr-4 py-3 border border-gray-200 dark:border-gray-700 rounded-xl 
+                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500 
+                            bg-white dark:bg-gray-800 shadow-sm hover:border-gray-300 dark:hover:border-gray-600 
+                            transition-all duration-200
+                            text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                />
+              </div>
             </div>
 
-            <div className="flex items-center justify-between">
+            
+            <Button
+              variant={showFilters ? "primary" : "ghost"}
+              icon={<Filter className="w-5 h-5" />}
+              className={`min-w-[120px] ${
+                showFilters 
+                  ? "bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/80"
+              }`}
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              Filters {(selectedTopics.size + selectedDifficulties.size + selectedTypes.size) > 0 && (
+                <span className={`ml-1.5 px-2.5 py-0.5 rounded-full text-sm font-medium ${
+                  showFilters 
+                    ? "bg-blue-500/20 dark:bg-blue-400/20 text-white" 
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                }`}>
+                  {selectedTopics.size + selectedDifficulties.size + selectedTypes.size}
+                </span>
+              )}
+            </Button>
+          </div>
+
+          
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-4"
+              >
+                <TaskFilters
+                  filters={{
+                    topics: selectedTopics,
+                    difficulties: selectedDifficulties,
+                    types: selectedTypes
+                  }}
+                  updateFilters={(newFilters) => {
+                    if (newFilters.topics) setSelectedTopics(newFilters.topics);
+                    if (newFilters.difficulties) setSelectedDifficulties(newFilters.difficulties);
+                    if (newFilters.types) setSelectedTypes(newFilters.types);
+                  }}
+                  clearFilters={() => {
+                    setSelectedTopics(new Set());
+                    setSelectedDifficulties(new Set());
+                    setSelectedTypes(new Set());
+                  }}
+                  tasks={allTasks}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="space-y-4">
+            {filteredTasks.length === 0 ? (
+              <div className="text-center py-12">
+                <FileText className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">No tasks found</p>
+              </div>
+            ) : (
+              filteredTasks.map(task => (
+                <div
+                  key={task.id}
+                  onClick={() => toggleTask(task.id)}
+                  className={`group bg-white dark:bg-gray-800 rounded-xl border transition-all cursor-pointer
+                    ${selectedTasks.has(task.id)
+                      ? 'border-blue-500 dark:border-blue-400 shadow-md'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-blue-200 dark:hover:border-blue-500/30'
+                    }`}
+                >
+                  <div className="p-4">
+                    <div className="flex items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex gap-2 mb-2 flex-wrap">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium
+                            ${task.difficulty === 'easy'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                              : task.difficulty === 'medium'
+                                ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
+                                : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                            }`}
+                          >
+                            {task.difficulty.charAt(0).toUpperCase() + task.difficulty.slice(1)}
+                          </span>
+                          <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full text-xs">
+                            {task.topic}
+                          </span>
+                          <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded-full text-xs">
+                            {task.type}
+                          </span>
+                        </div>
+                        
+                        <div className="text-gray-900 dark:text-white">
+                          {formatMathText(task.text)}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => handleEdit(e, task)}
+                          className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <div className={`w-5 h-5 rounded border transition-colors flex items-center justify-center
+                          ${selectedTasks.has(task.id)
+                            ? 'bg-blue-500 dark:bg-blue-400 border-blue-500 dark:border-blue-400'
+                            : 'border-gray-300 dark:border-gray-600'
+                          }`}
+                        >
+                          {selectedTasks.has(task.id) && (
+                            <Check className="w-4 h-4 text-white" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        
+        <div className="p-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
+            </div>
+            <div className="flex gap-3">
               <Button
                 variant="ghost"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-                className="text-gray-600"
+                onClick={onClose}
+                className="dark:text-gray-300 dark:hover:bg-gray-700"
               >
-                <Filter className="w-4 h-4 mr-2" />
-                Filters
-                {showFilters ? (
-                  <ChevronUp className="w-4 h-4 ml-2" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 ml-2" />
-                )}
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleAddTasks}
+                disabled={selectedTasks.size === 0}
+                className="dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+              >
+                Add Selected Tasks
               </Button>
             </div>
           </div>
         </div>
+      </div>
 
-        {showFilters && (
-          <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
-            {/* Difficulty Filter */}
-            <div>
-              <h3 className="font-medium mb-2 text-sm text-gray-700">Difficulty Level</h3>
-              <div className="flex flex-wrap gap-2">
-                {difficulties.map(difficulty => (
-                  <button
-                    key={difficulty}
-                    onClick={() => toggleFilter('difficulty', difficulty)}
-                    className={`px-3 py-1 rounded-full text-sm transition-colors
-                      ${filters.difficulty.has(difficulty)
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-white text-gray-600 hover:bg-gray-100'}`}
-                  >
-                    {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Topic Filter */}
-            <div>
-              <h3 className="font-medium mb-2 text-sm text-gray-700">Topics</h3>
-              <div className="space-y-2 dropdown-container relative">
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <input
-                    type="text"
-                    value={topicSearch}
-                    onChange={(e) => setTopicSearch(e.target.value)}
-                    onFocus={() => setShowTopicDropdown(true)}
-                    placeholder="Search topics..."
-                    className="w-full pl-8 pr-2 py-1 text-sm border rounded"
-                  />
-                </div>
-                {/* Topic Filter Dropdown */}
-                {showTopicDropdown && filteredTopics.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg overflow-hidden">
-                    <div className="max-h-48 overflow-y-auto">
-                      {filteredTopics.map(topic => (
-                        <button
-                          key={topic}
-                          onClick={() => {
-                            setSelectedTopicTags(prev => {
-                              const newSet = new Set(prev);
-                              if (newSet.has(topic)) {
-                                newSet.delete(topic);
-                              } else {
-                                newSet.add(topic);
-                              }
-                              return newSet;
-                            });
-                          }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 text-sm flex items-center justify-between
-                            ${selectedTopicTags.has(topic) ? 'bg-blue-50' : ''}`}
-                        >
-                          {topic}
-                          {selectedTopicTags.has(topic) && <Check className="w-4 h-4 text-blue-600" />}
-                        </button>
-                      ))}
-                    </div>
-                    {selectedTopicTags.size > 0 && (
-                      <div className="p-2 border-t bg-gray-50 flex justify-between items-center">
-                        <span className="text-sm text-gray-600">
-                          {selectedTopicTags.size} selected
-                        </span>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setSelectedTopicTags(new Set())}
-                            className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded"
-                          >
-                            Clear
-                          </button>
-                          <button
-                            onClick={() => handleTagsConfirm('topic')}
-                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                          >
-                            Add Tags
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {/* Selected Topics */}
-                {filters.topic.size > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {Array.from(filters.topic).map(topic => (
-                      <span
-                        key={topic}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full
-                                  bg-green-100 text-green-800 text-xs"
-                      >
-                        {topic}
-                        <button
-                          onClick={() => toggleFilter('topic', topic)}
-                          className="hover:bg-green-200 rounded-full p-0.5"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Type Filter */}
-            <div>
-              <h3 className="font-medium mb-2 text-sm text-gray-700">Question Types</h3>
-              <div className="space-y-2 dropdown-container relative">
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <input
-                    type="text"
-                    value={typeSearch}
-                    onChange={(e) => setTypeSearch(e.target.value)}
-                    onFocus={() => setShowTypeDropdown(true)}
-                    placeholder="Search types..."
-                    className="w-full pl-8 pr-2 py-1 text-sm border rounded"
-                  />
-                </div>
-                {/* Type Filter Dropdown */}
-                {showTypeDropdown && filteredTypes.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg overflow-hidden">
-                    <div className="max-h-48 overflow-y-auto">
-                      {filteredTypes.map(type => (
-                        <button
-                          key={type}
-                          onClick={() => {
-                            setSelectedTypeTags(prev => {
-                              const newSet = new Set(prev);
-                              if (newSet.has(type)) {
-                                newSet.delete(type);
-                              } else {
-                                newSet.add(type);
-                              }
-                              return newSet;
-                            });
-                          }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 text-sm flex items-center justify-between
-                            ${selectedTypeTags.has(type) ? 'bg-blue-50' : ''}`}
-                        >
-                          {type}
-                          {selectedTypeTags.has(type) && <Check className="w-4 h-4 text-blue-600" />}
-                        </button>
-                      ))}
-                    </div>
-                    {selectedTypeTags.size > 0 && (
-                      <div className="p-2 border-t bg-gray-50 flex justify-between items-center">
-                        <span className="text-sm text-gray-600">
-                          {selectedTypeTags.size} selected
-                        </span>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setSelectedTypeTags(new Set())}
-                            className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded"
-                          >
-                            Clear
-                          </button>
-                          <button
-                            onClick={() => handleTagsConfirm('type')}
-                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                          >
-                            Add Tags
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {/* Selected Types */}
-                {filters.type.size > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {Array.from(filters.type).map(type => (
-                      <span
-                        key={type}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full
-                                  bg-purple-100 text-purple-800 text-xs"
-                      >
-                        {type}
-                        <button
-                          onClick={() => toggleFilter('type', type)}
-                          className="hover:bg-purple-200 rounded-full p-0.5"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+      
+      <AnimatePresence>
+        {editingTask && (
+          <TaskEditModal
+            task={editingTask}
+            onClose={() => setEditingTask(null)}
+            onSave={handleTaskUpdate}
+          />
         )}
-
-        <div className="flex-1 overflow-y-auto p-6">
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredTasks.map((task) => (
-                <div
-                  key={task.id}
-                  onClick={() => {
-                    const newSelected = new Set(selectedTasks);
-                    if (newSelected.has(task.id)) {
-                      newSelected.delete(task.id);
-                    } else {
-                      newSelected.add(task.id);
-                    }
-                    setSelectedTasks(newSelected);
-                  }}
-                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors
-                    ${selectedTasks.has(task.id)
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex gap-2 mb-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium
-                          ${task.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
-                            task.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'}`}
-                        >
-                          {task.difficulty}
-                        </span>
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                          {task.topic}
-                        </span>
-                      </div>
-                      <div className="text-gray-900 prose prose-sm max-w-none">
-                        {formatMathText(task.text)}
-                      </div>
-                    </div>
-                    {selectedTasks.has(task.id) && (
-                      <Check className="w-5 h-5 text-blue-600" />
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="p-6 border-t">
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="ghost"
-              onClick={onClose}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSelect}
-              disabled={selectedTasks.size === 0}
-            >
-              Add Selected ({selectedTasks.size})
-            </Button>
-          </div>
-        </div>
-      </motion.div>
-    </motion.div>
+      </AnimatePresence>
+    </div>
   );
 }; 

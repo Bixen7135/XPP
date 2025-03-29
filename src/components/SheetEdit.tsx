@@ -6,14 +6,14 @@ import { PageLayout } from './common/PageLayout';
 import { supabase } from '../services/supabase';
 import { TaskSheet } from '../types/supabase';
 import { Question } from '../types/exam';
-import { ArrowLeft, Save, Trash2, GripVertical, Plus, AlertTriangle, Edit2 } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, GripVertical, Plus, AlertTriangle, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from './common/Button';
 import { toast } from 'react-hot-toast';
 import { StrictModeDroppable } from './StrictModeDroppable';
 import { TaskSelectorModal } from './TaskSelectorModal';
 import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
-import { TaskEditor } from './TaskEditor';
+import { TaskEditModal } from './TaskEditModal';
 
 const styles = `
   .task-editor-overlay {
@@ -45,8 +45,9 @@ export const SheetEdit = () => {
   const [error, setError] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [editingTask, setEditingTask] = useState<Question | null>(null);
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
-  // Prompt user when trying to leave with unsaved changes
+  
   useEffect(() => {
     if (hasUnsavedChanges) {
       const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -58,7 +59,7 @@ export const SheetEdit = () => {
     }
   }, [hasUnsavedChanges]);
 
-  // Load sheet data
+  
   useEffect(() => {
     loadSheet();
   }, [id]);
@@ -89,7 +90,25 @@ export const SheetEdit = () => {
         if (tasksError) throw tasksError;
         
         const orderedTasks = sheetData.tasks
-          .map((taskId: string) => tasksData?.find(task => task.id === taskId))
+          .map((taskId: string) => {
+            const task = tasksData?.find(t => t.id === taskId);
+            if (task) {
+              return {
+                id: task.id,
+                text: task.text,
+                type: task.type,
+                topic: task.topic,
+                difficulty: task.difficulty,
+                correctAnswer: task.correct_answer,
+                answer: task.answers?.answer || null,
+                explanation: task.explanation,
+                context: task.context,
+                instructions: task.instructions,
+                learningOutcome: task.learning_outcome
+              };
+            }
+            return null;
+          })
           .filter(Boolean) as Question[];
         
         setTasks(orderedTasks);
@@ -112,18 +131,18 @@ export const SheetEdit = () => {
     try {
       setSaving(true);
       
-      // Get the current user
+      
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
         throw new Error('User not authenticated');
       }
       
-      // Prepare the update data
+      
       const updateData = {
         title,
         description: description || null,
-        tasks: tasks.map(task => task.id),  // Use 'tasks' field for task IDs
+        tasks: tasks.map(task => task.id),  
         updated_at: new Date().toISOString()
       };
       
@@ -178,7 +197,7 @@ export const SheetEdit = () => {
     setHasUnsavedChanges(true);
   };
 
-  const handleEditTask = (updatedTask: Question) => {
+  const handleEditTask = async (updatedTask: Question) => {
     setTasks(prev => prev.map(task => 
       task.id === updatedTask.id ? updatedTask : task
     ));
@@ -209,11 +228,23 @@ export const SheetEdit = () => {
     });
   };
 
+  const toggleTaskExpanded = (taskId: string) => {
+    setExpandedTasks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  };
+
   if (loading) {
     return (
       <PageLayout maxWidth="2xl">
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400" />
         </div>
       </PageLayout>
     );
@@ -223,8 +254,8 @@ export const SheetEdit = () => {
     return (
       <PageLayout maxWidth="2xl">
         <div className="flex flex-col items-center justify-center h-64">
-          <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
-          <p className="text-gray-600">{error}</p>
+          <AlertTriangle className="w-12 h-12 text-red-500 dark:text-red-400 mb-4" />
+          <p className="text-gray-600 dark:text-gray-300">{error}</p>
           <Button
             variant="primary"
             size="sm"
@@ -242,177 +273,188 @@ export const SheetEdit = () => {
     <PageLayout maxWidth="2xl">
       <style>{styles}</style>
       <div className="space-y-6">
-        {/* Header with navigation and actions */}
+        
         <div className="flex items-center justify-between">
           <button
             onClick={() => {
               if (hasUnsavedChanges) {
                 if (window.confirm('You have unsaved changes. Are you sure you want to leave?')) {
-                  navigate(`/sheets/${id}`);
+                  navigate(-1);
                 }
               } else {
-                navigate(`/sheets/${id}`);
+                navigate(-1);
               }
             }}
-            className="flex items-center text-gray-600 hover:text-gray-900"
+            className="inline-flex items-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
           >
             <ArrowLeft className="w-5 h-5 mr-2" />
-            Back to Sheet
+            Back
           </button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <Button
-              variant="ghost"
-              size="sm"
+              variant="primary"
+              icon={<Save className="w-4 h-4" />}
+              onClick={handleSave}
+              disabled={saving}
+              className="dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
+        </div>
+
+        
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 space-y-6">
+          <div className="space-y-4">
+            <input
+              type="text"
+              name="title"
+              value={title}
+              onChange={handleInputChange}
+              placeholder="Sheet Title"
+              className="w-full text-2xl font-semibold bg-transparent border-0 border-b-2 border-gray-200 dark:border-gray-700 focus:ring-0 focus:border-blue-500 dark:focus:border-blue-400 px-0 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+            />
+            <textarea
+              name="description"
+              value={description}
+              onChange={handleInputChange}
+              placeholder="Add a description..."
+              rows={3}
+              className="w-full bg-transparent border-0 focus:ring-0 resize-none text-gray-600 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
+            />
+          </div>
+        </div>
+
+        
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Tasks</h2>
+            <Button
+              variant="secondary"
               icon={<Plus className="w-4 h-4" />}
               onClick={() => setShowTaskSelector(true)}
+              className="dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 dark:border-gray-600"
             >
               Add Tasks
             </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<Save className="w-4 h-4" />}
-              onClick={handleSave}
-              disabled={saving || !hasUnsavedChanges}
-            >
-              {saving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Saved'}
-            </Button>
-          </div>
-        </div>
-
-        {/* Edit Form */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Title
-              </label>
-              <input
-                type="text"
-                name="title"
-                value={title}
-                onChange={handleInputChange}
-                className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter sheet title"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description
-              </label>
-              <textarea
-                name="description"
-                value={description}
-                onChange={handleInputChange}
-                className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter sheet description"
-                rows={3}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Tasks List */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Tasks</h3>
-            <span className="text-sm text-gray-500">
-              {tasks.length} task{tasks.length !== 1 ? 's' : ''}
-            </span>
           </div>
 
-          {tasks.length === 0 ? (
-            <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
-              <p className="text-gray-500">No tasks in this sheet yet.</p>
-              <Button
-                variant="primary"
-                size="sm"
-                icon={<Plus className="w-4 h-4" />}
-                onClick={() => setShowTaskSelector(true)}
-                className="mt-4"
-              >
-                Add Tasks
-              </Button>
-            </div>
-          ) : (
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <StrictModeDroppable droppableId="tasks" type="TASK">
-                {(provided) => (
-                  <div
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                    className="space-y-4"
-                  >
-                    {tasks.map((task, index) => (
-                      <Draggable
-                        key={task.id}
-                        draggableId={task.id}
-                        index={index}
-                      >
-                        {(provided) => (
-                          <motion.div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            layout
-                            className="bg-white rounded-xl shadow-sm p-6"
-                          >
-                            <div className="flex items-start gap-4">
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <StrictModeDroppable droppableId="tasks">
+              {(provided) => (
+                <div
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
+                  className="space-y-3"
+                >
+                  {tasks.map((task, index) => (
+                    <Draggable key={task.id} draggableId={task.id} index={index}>
+                      {(provided) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className="group bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 border border-gray-100 dark:border-gray-600/50 hover:border-blue-200 dark:hover:border-blue-500/30 transition-colors"
+                        >
+                          <div className="flex flex-col w-full">
+                            <div className="flex items-start gap-4 w-full">
                               <div
                                 {...provided.dragHandleProps}
-                                className="flex items-center mt-1"
+                                className="flex-shrink-0 mt-1 cursor-grab active:cursor-grabbing"
                               >
-                                <GripVertical className="w-5 h-5 text-gray-400" />
+                                <GripVertical className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                               </div>
-                              <div className="flex-1">
-                                <div className="flex gap-2 mb-2">
+                              
+                              <div className="flex-grow">
+                                <div className="flex gap-2 mb-2 flex-wrap">
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium
-                                    ${task.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
-                                      task.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                      'bg-red-100 text-red-800'}`}
+                                    ${task.difficulty === 'easy'
+                                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                                      : task.difficulty === 'medium'
+                                        ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
+                                        : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                                    }`}
                                   >
-                                    {task.difficulty}
+                                    {task.difficulty.charAt(0).toUpperCase() + task.difficulty.slice(1)}
                                   </span>
-                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                                  <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full text-xs">
                                     {task.topic}
                                   </span>
-                                </div>
-                                <div className="text-gray-900 prose prose-sm max-w-none">
-                                  {formatMathText(task.text)}
+                                  <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded-full text-xs">
+                                    {task.type}
+                                  </span>
                                 </div>
                               </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  icon={<Edit2 className="w-4 h-4" />}
+
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleTaskExpanded(task.id);
+                                  }}
+                                  className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600/50"
+                                >
+                                  {expandedTasks.has(task.id) ? (
+                                    <ChevronUp className="w-4 h-4" />
+                                  ) : (
+                                    <ChevronDown className="w-4 h-4" />
+                                  )}
+                                </button>
+                                <button
                                   onClick={() => setEditingTask(task)}
-                                  className="text-blue-600 hover:bg-blue-50"
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  icon={<Trash2 className="w-4 h-4" />}
+                                  className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600/50"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
                                   onClick={() => handleRemoveTask(task.id)}
-                                  className="text-red-600 hover:bg-red-50"
-                                />
+                                  className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600/50"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
                             </div>
-                          </motion.div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </StrictModeDroppable>
-            </DragDropContext>
+
+                            <div className="mt-4 text-gray-900 dark:text-white font-medium w-full pl-9 pr-4">
+                              {formatMathText(task.text)}
+                            </div>
+
+                            {expandedTasks.has(task.id) && (
+                              <div className="mt-4 space-y-4 w-full pl-9 pr-9">
+                                <div className="p-4 rounded-lg bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
+                                  <div className="font-medium text-blue-900 dark:text-blue-300 mb-2">Solution:</div>
+                                  <div className="prose dark:prose-invert prose-sm max-w-none text-blue-800 dark:text-blue-200 katex-text break-words">
+                                    {formatMathText(task.correctAnswer || 'No solution provided')}
+                                  </div>
+                                </div>
+                                <div className="p-4 rounded-lg bg-green-50/50 dark:bg-green-900/20 border border-green-100 dark:border-green-800">
+                                  <div className="font-medium text-green-900 dark:text-green-300 mb-2">Answer:</div>
+                                  <div className="prose dark:prose-invert prose-sm max-w-none text-green-800 dark:text-green-200 katex-text break-words">
+                                    {formatMathText(task.answer || 'No answer provided')}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </StrictModeDroppable>
+          </DragDropContext>
+
+          {tasks.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500 dark:text-gray-400">No tasks added yet. Click "Add Tasks" to get started.</p>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Task Selector Modal */}
+      
       <AnimatePresence>
         {showTaskSelector && (
           <TaskSelectorModal
@@ -423,28 +465,14 @@ export const SheetEdit = () => {
         )}
       </AnimatePresence>
 
-      {/* Task Editor Modal */}
+      
       <AnimatePresence>
         {editingTask && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="task-editor-overlay"
-          >
-            <motion.div
-              initial={{ y: -20 }}
-              animate={{ y: 0 }}
-              exit={{ y: -20 }}
-              className="w-full max-w-4xl mx-4"
-            >
-              <TaskEditor
-                task={editingTask}
-                onSave={handleEditTask}
-                onCancel={() => setEditingTask(null)}
-              />
-            </motion.div>
-          </motion.div>
+          <TaskEditModal
+            task={editingTask}
+            onClose={() => setEditingTask(null)}
+            onSave={handleEditTask}
+          />
         )}
       </AnimatePresence>
     </PageLayout>

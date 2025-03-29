@@ -21,14 +21,14 @@ export const throttledCompletion = throttle(async (messages: any[]) => {
 
 export { openai };
 
-// Add error types
+
 interface OpenAIError {
   message: string;
   code?: string;
   details?: any;
 }
 
-// Add error handling wrapper
+
 async function handleOpenAIRequest<T>(
   operation: () => Promise<T>,
   errorContext: string
@@ -42,7 +42,7 @@ async function handleOpenAIRequest<T>(
   }
 }
 
-// Add these helper functions at the top
+
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
 
@@ -63,7 +63,7 @@ const retryWithBackoff = async <T>(
   }
 };
 
-// Update the exam generation function to match task generation pattern
+
 export const generateExamQuestions = async (config: ExamConfig): Promise<Question[]> => {
   return handleOpenAIRequest(async () => {
     const { sections } = config;
@@ -99,7 +99,7 @@ export const generateExamQuestions = async (config: ExamConfig): Promise<Questio
   }, 'exam generation');
 };
 
-// Update the exam prompt to match task prompt structure
+
 function createExamPrompt(config: ExamConfig & { 
   currentSection: string;
   questionsNeeded: number;
@@ -129,7 +129,7 @@ Requirements:
 5. Ensure questions are appropriate for ${type} exam level`;
 }
 
-// Update the system prompt to be more specific
+
 function createSystemPrompt(config: ExamConfig): string {
   return `You are an expert exam creator specializing in ${config.type} exams.
 
@@ -147,7 +147,7 @@ Use LaTeX format for mathematical expressions:
 Follow the exact question format provided in the prompt.`;
 }
 
-// Add helper functions
+
 function createSectionPrompt(section: string, config: ExamConfig & { count: number }): string {
   const examConfig = {
     ...config,
@@ -175,7 +175,7 @@ function getSectionSpecificRequirements(section: string, examType: string): stri
       'Reading': '- Use evidence-based questions\n- Include complex passages',
       'Writing': '- Focus on grammar and expression\n- Include rhetorical skills questions'
     }
-    // Add more exam types and sections as needed
+    
   };
 
   return requirements[examType]?.[section] || 
@@ -183,9 +183,8 @@ function getSectionSpecificRequirements(section: string, examType: string): stri
 }
 
 function isTopicValidForSection(topic: string, section: string): boolean {
-  // Add logic to determine if a topic is valid for a section
-  // This could be based on a predefined mapping or rules
-  return true; // Simplified for now
+  
+  return true; 
 }
 
 function balanceQuestionDifficulty(
@@ -201,13 +200,13 @@ function balanceQuestionDifficulty(
     hard: Math.round((distribution.hard / 100) * total)
   };
 
-  // Adjust questions to match target distribution
+  
   const currentCounts = questions.reduce((acc, q) => {
     acc[q.difficulty as keyof typeof acc] = (acc[q.difficulty as keyof typeof acc] || 0) + 1;
     return acc;
   }, { easy: 0, medium: 0, hard: 0 });
 
-  // Adjust difficulties to match target distribution
+  
   for (const difficulty of ['easy', 'medium', 'hard'] as const) {
     while (currentCounts[difficulty] > targetCounts[difficulty]) {
       const questionToAdjust = questions.find(q => q.difficulty === difficulty);
@@ -472,7 +471,7 @@ Format requirements:
 - Add documentation requirements`
   };
 
-  // Subject-specific requirements for each task type
+  
   const subjectSpecificPrompts: Record<string, Record<string, string>> = {
     'Mathematics': {
       'Multiple Choice': `
@@ -606,10 +605,8 @@ Additional requirements:
     }
   };
 
-  // Get base prompt
   let prompt = basePrompts[type] || '';
 
-  // Add subject-specific requirements if available
   if (subject && subjectSpecificPrompts[subject]?.[type]) {
     prompt += '\n\n' + subjectSpecificPrompts[subject][type];
   }
@@ -618,7 +615,6 @@ Additional requirements:
 };
 
 function createTaskPrompt(config: TaskConfig): string {
-  // Update to include subject in getTypeSpecificPrompt
   const typeSpecificPrompt = getTypeSpecificPrompt(config.type, config.subject);
 
   return `Generate ${config.count} ${config.difficulty} level ${config.type} tasks for ${config.topics.join(', ')}.
@@ -655,7 +651,6 @@ function parseQuestions(response: string, config: ExamConfig | TaskConfig): Ques
     const items = response.split(delimiter).filter(item => item.trim());
     
     return items.map((content, index) => {
-      // Improved field parsing to handle multiline values
       const fields: Record<string, string> = {};
       const lines = content.split('\n');
       let currentField = '';
@@ -664,25 +659,20 @@ function parseQuestions(response: string, config: ExamConfig | TaskConfig): Ques
       for (const line of lines) {
         const match = line.match(/^([A-Z_]+):\s*(.*)$/);
         if (match) {
-          // Save previous field if exists
           if (currentField && currentValue.length > 0) {
             fields[currentField] = currentValue.join('\n').trim();
           }
-          // Start new field
           currentField = match[1];
           currentValue = [match[2]];
         } else if (currentField && line.trim()) {
-          // Continue previous field
           currentValue.push(line.trim());
         }
       }
-      // Save last field
       if (currentField && currentValue.length > 0) {
         fields[currentField] = currentValue.join('\n').trim();
       }
 
       if (!isExam) {
-        // For tasks, ensure all required fields are present
         const requiredFields = ['TYPE', 'DIFFICULTY', 'TOPIC', 'TEXT', 'ANSWER', 'SOLUTION'];
         for (const field of requiredFields) {
           if (!fields[field]) {
@@ -691,16 +681,14 @@ function parseQuestions(response: string, config: ExamConfig | TaskConfig): Ques
           }
         }
 
-        // Make topic validation case-insensitive and trim whitespace
         const normalizedTopics = config.topics.map(t => t.toLowerCase().trim());
         const taskTopic = fields['TOPIC'].toLowerCase().trim();
         if (!normalizedTopics.includes(taskTopic)) {
-          // If topic doesn't match exactly, try to find the closest match
           const matchingTopic = config.topics.find(t => 
             t.toLowerCase().includes(taskTopic) || taskTopic.includes(t.toLowerCase())
           );
           if (matchingTopic) {
-            fields['TOPIC'] = matchingTopic; // Use the properly cased topic
+            fields['TOPIC'] = matchingTopic; 
           } else {
             throw new Error(`Invalid topic in task ${index + 1}`);
           }
@@ -712,7 +700,7 @@ function parseQuestions(response: string, config: ExamConfig | TaskConfig): Ques
           type: fields['TYPE'],
           topic: fields['TOPIC'],
           difficulty: fields['DIFFICULTY'].toLowerCase(),
-          correctAnswer: fields['SOLUTION'],  // Use SOLUTION for correctAnswer
+          correctAnswer: fields['SOLUTION'], 
           explanation: fields['EXPLANATION'] || null,
           context: fields['CONTEXT'] || null,
           answer: fields['ANSWER'] || null,
@@ -720,7 +708,6 @@ function parseQuestions(response: string, config: ExamConfig | TaskConfig): Ques
           learningOutcome: fields['LEARNING_OUTCOME'] || null
         };
       } else {
-        // Handle exam-specific formats
         const examType = (config as ExamConfig).type;
         switch (examType) {
           case 'IELTS':
@@ -769,7 +756,7 @@ function parseQuestions(response: string, config: ExamConfig | TaskConfig): Ques
               difficulty: fields['COMPLEXITY'] ? `Level ${fields['COMPLEXITY']}` : 'medium',
               correctAnswer: fields['CORRECT_ANSWER'] || null,
               answers: fields['OPTIONS'] ? JSON.parse(fields['OPTIONS']) : null,
-              context: fields['QUESTION_KZ'] || null // Store Kazakh version in context
+              context: fields['QUESTION_KZ'] || null 
             };
 
           default:
@@ -792,7 +779,6 @@ function parseQuestions(response: string, config: ExamConfig | TaskConfig): Ques
   }
 }
 
-// Add export keyword to the generateTasks function
 export const generateTasks = async (config: TaskConfig): Promise<Question[]> => {
   return handleOpenAIRequest(async () => {
     const prompt = createTaskPrompt(config);

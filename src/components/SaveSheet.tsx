@@ -1,139 +1,230 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Tag, Plus } from 'lucide-react';
+import { X, ArrowLeft } from 'lucide-react';
+import { Button } from './common/Button';
+import { Question } from '../types/exam';
 
 interface SaveSheetProps {
-  onSave: (title: string, description?: string, tags?: string[]) => void;
+  onSave: (title: string, tasks: Question[], description?: string) => void;
   onClose: () => void;
-  initialTags?: string[];
+  selectedTasks: Question[];
 }
 
-export const SaveSheet = ({ onSave, onClose, initialTags = [] }: SaveSheetProps) => {
+export const SaveSheet = ({ onSave, onClose, selectedTasks }: SaveSheetProps) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [tags, setTags] = useState<string[]>(initialTags);
-  const [newTag, setNewTag] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(title, description, tags);
-  };
+    if (!title.trim()) return;
 
-  const addTag = () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()]);
-      setNewTag('');
+    try {
+      setIsSubmitting(true);
+      onSave(title, selectedTasks, description);
+    } catch (error) {
+      console.error('Error saving sheet:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
-  };
+  
+  const groupedTags = selectedTasks.reduce((acc, task) => {
+    
+    if (!acc['difficulty']) {
+      acc['difficulty'] = new Set();
+    }
+    acc['difficulty'].add(`difficulty:${task.difficulty}`);
+
+    
+    if (!acc['topic']) {
+      acc['topic'] = new Set();
+    }
+    acc['topic'].add(`topic:${task.topic}`);
+
+    
+    if (!acc['type']) {
+      acc['type'] = new Set();
+    }
+    acc['type'].add(`type:${task.type}`);
+
+    return acc;
+  }, {} as Record<string, Set<string>>);
+
+  // Convert Sets to Arrays
+  const processedTags = Object.entries(groupedTags).reduce((acc, [type, tags]) => {
+    acc[type] = Array.from(tags);
+    return acc;
+  }, {} as Record<string, string[]>);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
     >
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-xl p-6 max-w-md w-full mx-4"
-      >
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold">Save as Task Sheet</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full h-[85vh]
+                    border border-gray-200/50 dark:border-gray-700/50 flex flex-col max-w-2xl my-4">
+        
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Save Sheet</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Save {selectedTasks.length} selected task{selectedTasks.length !== 1 ? 's' : ''} as a new sheet
+            </p>
+          </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full"
+            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 
+                     hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-all"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Title <span className="text-red-500">*</span>
+        <div className="space-y-6 flex-1 overflow-y-auto">
+          
+          <div>
+            <label htmlFor="title" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              Title
             </label>
             <input
               type="text"
+              id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter sheet title"
-              required
+              className="w-full px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl shadow-sm 
+                       focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                       placeholder-gray-400 dark:placeholder-gray-500 transition-all"
+              placeholder="Enter a descriptive title for your sheet"
             />
           </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description (Optional)
+          
+          <div>
+            <label htmlFor="description" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              Description <span className="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
             </label>
             <textarea
+              id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter sheet description"
               rows={3}
+              className="w-full px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl shadow-sm 
+                       focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                       placeholder-gray-400 dark:placeholder-gray-500 transition-all"
+              placeholder="Add a description to provide more context about this sheet"
             />
           </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tags (Optional)
-            </label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {tags.map(tag => (
-                <div key={tag} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center">
-                  <span className="text-sm">{tag}</span>
-                  <button 
-                    type="button"
-                    onClick={() => removeTag(tag)}
-                    className="ml-1 text-blue-600 hover:text-blue-800"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="flex">
-              <input
-                type="text"
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                className="flex-1 p-2 border rounded-l-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Add a tag"
-              />
-              <button
-                type="button"
-                onClick={addTag}
-                className="bg-blue-600 text-white px-3 rounded-r-xl hover:bg-blue-700"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
+          
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-6 border border-gray-100 dark:border-gray-600/50">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+              Selected Tasks Overview
+            </h3>
+            <div className="grid grid-cols-[100px_1fr] gap-y-4">
+              
+              {processedTags['difficulty'] && (
+                <>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 self-center">Difficulty</span>
+                  <div className="flex flex-wrap gap-2">
+                    {processedTags['difficulty'].map((tag) => {
+                      const difficulty = tag.split(':')[1];
+                      return (
+                        <span
+                          key={tag}
+                          className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium 
+                            ${difficulty === 'easy'
+                              ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 ring-1 ring-green-400/30'
+                              : difficulty === 'medium'
+                                ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 ring-1 ring-yellow-400/30'
+                                : 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 ring-1 ring-red-400/30'
+                            }`}
+                        >
+                          {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              
+              {processedTags['topic'] && (
+                <>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 self-center">Topics</span>
+                  <div className="flex flex-wrap gap-2">
+                    {processedTags['topic'].map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium
+                                 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300
+                                 ring-1 ring-blue-400/30"
+                      >
+                        {tag.split(':')[1]}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              
+              {processedTags['type'] && (
+                <>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 self-center">Types</span>
+                  <div className="flex flex-wrap gap-2">
+                    {processedTags['type'].map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium
+                                 bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300
+                                 ring-1 ring-purple-400/30"
+                      >
+                        {tag.split(':')[1]}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
+        </div>
 
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
+        
+        <div className="p-6">
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="ghost"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              className="px-6 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 
+                       hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors
+                       flex items-center font-medium"
             >
               Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSubmit}
+              disabled={!title.trim() || isSubmitting}
+              className="bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600
+                       flex items-center gap-2"
             >
-              Save Sheet
-            </button>
+              {isSubmitting ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Sheet'
+              )}
+            </Button>
           </div>
-        </form>
-      </motion.div>
+        </div>
+      </div>
     </motion.div>
   );
 };

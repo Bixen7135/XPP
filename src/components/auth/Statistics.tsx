@@ -3,6 +3,9 @@ import { PageLayout } from '../common/PageLayout';
 import { motion } from 'framer-motion';
 import { Award, CheckCircle, TrendingUp, Clock, BookOpen } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import { AdaptiveLearningProgress } from '../AdaptiveLearningProgress';
+import { SpacedRepetitionProgress } from '../SpacedRepetitionProgress';
+import type { AdaptiveMetrics, SpacedRepetitionMetrics } from '../../types/analytics';
 
 interface UserStats {
   solvedTasks: number;
@@ -33,32 +36,44 @@ export const Statistics: React.FC = () => {
       hard: 0
     }
   });
+
+  const [adaptiveMetrics, setAdaptiveMetrics] = useState<AdaptiveMetrics | null>(null);
+  const [spacedRepetitionMetrics, setSpacedRepetitionMetrics] = useState<SpacedRepetitionMetrics | null>(null);
   
   useEffect(() => {
     const fetchStatistics = async () => {
       try {
         setLoading(true);
         
-        // In a real app, this would fetch actual statistics from the backend
-        // For now, we'll use placeholder data
+       
+        const { data: basicStats } = await supabase
+          .from('user_statistics')
+          .select('*')
+          .single();
         
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (basicStats) {
+          setStats(basicStats);
+        }
+
         
-        // Sample data
-        setStats({
-          solvedTasks: 24,
-          totalTasks: 50,
-          successRate: 0.85,
-          averageScore: 8.7,
-          submissionsCount: 32,
-          recentActivity: 5,
-          tasksByDifficulty: {
-            easy: 12,
-            medium: 8,
-            hard: 4
-          }
-        });
+        const { data: adaptiveData } = await supabase
+          .from('adaptive_metrics')
+          .select('*')
+          .single();
+
+        if (adaptiveData) {
+          setAdaptiveMetrics(adaptiveData);
+        }
+
+       
+        const { data: spacedData } = await supabase
+          .from('spaced_repetition')
+          .select('*')
+          .single();
+
+        if (spacedData) {
+          setSpacedRepetitionMetrics(spacedData);
+        }
       } catch (error) {
         console.error('Error fetching statistics:', error);
       } finally {
@@ -68,6 +83,11 @@ export const Statistics: React.FC = () => {
     
     fetchStatistics();
   }, []);
+
+  const handleStartReview = async (items: SpacedRepetitionMetrics['items']) => {
+   
+    console.log('Starting review session with items:', items);
+  };
   
   if (loading) {
     return (
@@ -78,121 +98,142 @@ export const Statistics: React.FC = () => {
       </PageLayout>
     );
   }
-  
+
   return (
     <PageLayout maxWidth="2xl">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="space-y-8"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="space-y-6"
       >
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold mb-2">My Statistics</h1>
-          <p className="text-gray-600">
-            Track your progress and performance on the platform.
-          </p>
-        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mr-4">
-                <Award className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm text-gray-500">Solved Tasks</div>
-                <div className="text-2xl font-bold">{stats.solvedTasks}</div>
-                <div className="text-xs text-gray-500">out of {stats.totalTasks}</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 mr-4">
-                <CheckCircle className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm text-gray-500">Success Rate</div>
-                <div className="text-2xl font-bold">{(stats.successRate * 100).toFixed(1)}%</div>
-                <div className="text-xs text-gray-500">{stats.submissionsCount} submissions</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-600 mr-4">
-                <TrendingUp className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm text-gray-500">Average Score</div>
-                <div className="text-2xl font-bold">{stats.averageScore.toFixed(1)}</div>
-                <div className="text-xs text-gray-500">points per task</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 mr-4">
-                <Clock className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm text-gray-500">Recent Activity</div>
-                <div className="text-2xl font-bold">{stats.recentActivity}</div>
-                <div className="text-xs text-gray-500">submissions this week</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {adaptiveMetrics && (
+          <AdaptiveLearningProgress metrics={adaptiveMetrics} />
+        )}
+
         
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Tasks by Difficulty</h3>
-          <div className="flex items-center p-4">
-            <div className="relative w-full h-8 bg-gray-200 rounded-full overflow-hidden">
-              <div 
-                className="absolute inset-y-0 left-0 bg-green-500"
-                style={{ width: `${stats.tasksByDifficulty.easy / stats.solvedTasks * 100}%` }}
-              ></div>
-              <div 
-                className="absolute inset-y-0 left-0 bg-yellow-500"
-                style={{ 
-                  width: `${stats.tasksByDifficulty.medium / stats.solvedTasks * 100}%`,
-                  marginLeft: `${stats.tasksByDifficulty.easy / stats.solvedTasks * 100}%` 
-                }}
-              ></div>
-              <div 
-                className="absolute inset-y-0 left-0 bg-red-500"
-                style={{ 
-                  width: `${stats.tasksByDifficulty.hard / stats.solvedTasks * 100}%`,
-                  marginLeft: `${(stats.tasksByDifficulty.easy + stats.tasksByDifficulty.medium) / stats.solvedTasks * 100}%` 
-                }}
-              ></div>
+        {spacedRepetitionMetrics && (
+          <SpacedRepetitionProgress 
+            metrics={spacedRepetitionMetrics}
+            onStartReview={handleStartReview}
+          />
+        )}
+
+       
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-700"
+          >
+            <div className="flex items-center space-x-3 mb-2">
+              <Award className="w-5 h-5 text-blue-400" />
+              <h3 className="text-lg font-semibold text-white">Success Rate</h3>
             </div>
-          </div>
-          <div className="flex justify-center gap-6 mt-2">
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Easy ({stats.tasksByDifficulty.easy})</span>
+            <div className="text-3xl font-bold text-blue-400">
+              {(stats.successRate * 100).toFixed(1)}%
             </div>
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Medium ({stats.tasksByDifficulty.medium})</span>
+            <div className="text-sm text-gray-400 mt-1">
+              {stats.solvedTasks} tasks completed
             </div>
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Hard ({stats.tasksByDifficulty.hard})</span>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-700"
+          >
+            <div className="flex items-center space-x-3 mb-2">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <h3 className="text-lg font-semibold text-white">Average Score</h3>
             </div>
-          </div>
+            <div className="text-3xl font-bold text-green-400">
+              {stats.averageScore.toFixed(1)}
+            </div>
+            <div className="text-sm text-gray-400 mt-1">
+              Out of 10
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-700"
+          >
+            <div className="flex items-center space-x-3 mb-2">
+              <TrendingUp className="w-5 h-5 text-purple-400" />
+              <h3 className="text-lg font-semibold text-white">Recent Activity</h3>
+            </div>
+            <div className="text-3xl font-bold text-purple-400">
+              {stats.recentActivity}
+            </div>
+            <div className="text-sm text-gray-400 mt-1">
+              Tasks in last 7 days
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-700"
+          >
+            <div className="flex items-center space-x-3 mb-2">
+              <BookOpen className="w-5 h-5 text-orange-400" />
+              <h3 className="text-lg font-semibold text-white">Total Submissions</h3>
+            </div>
+            <div className="text-3xl font-bold text-orange-400">
+              {stats.submissionsCount}
+            </div>
+            <div className="text-sm text-gray-400 mt-1">
+              Practice attempts
+            </div>
+          </motion.div>
         </div>
-        
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Recent Submissions</h3>
-          <div className="text-center py-8 text-gray-500">
-            No recent submissions found.
+
+       
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-700"
+        >
+          <h3 className="text-lg font-semibold mb-4 text-white">Tasks by Difficulty</h3>
+          <div className="space-y-4">
+            <div className="flex items-center">
+              <div className="w-24 text-white">Easy</div>
+              <div className="flex-1 h-6 bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-green-400 rounded-full"
+                  style={{ width: `${(stats.tasksByDifficulty.easy / stats.solvedTasks) * 100}%` }}
+                ></div>
+              </div>
+              <div className="ml-2 w-8 text-right text-white">{stats.tasksByDifficulty.easy}</div>
+            </div>
+            <div className="flex items-center">
+              <div className="w-24 text-white">Medium</div>
+              <div className="flex-1 h-6 bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-yellow-400 rounded-full"
+                  style={{ width: `${(stats.tasksByDifficulty.medium / stats.solvedTasks) * 100}%` }}
+                ></div>
+              </div>
+              <div className="ml-2 w-8 text-right text-white">{stats.tasksByDifficulty.medium}</div>
+            </div>
+            <div className="flex items-center">
+              <div className="w-24 text-white">Hard</div>
+              <div className="flex-1 h-6 bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-red-400 rounded-full"
+                  style={{ width: `${(stats.tasksByDifficulty.hard / stats.solvedTasks) * 100}%` }}
+                ></div>
+              </div>
+              <div className="ml-2 w-8 text-right text-white">{stats.tasksByDifficulty.hard}</div>
+            </div>
           </div>
-        </div>
+        </motion.div>
       </motion.div>
     </PageLayout>
   );

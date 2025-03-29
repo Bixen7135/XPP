@@ -7,14 +7,14 @@ export const theme = {
       700: '#1d4ed8'
     },
     gray: {
-      // ... color scale
+      
     }
   },
   spacing: {
     xs: '0.5rem',
     sm: '0.75rem',
     md: '1rem',
-    // ... spacing scale
+    
   },
   borderRadius: {
     sm: '0.375rem',
@@ -25,6 +25,6 @@ export const theme = {
   shadows: {
     sm: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
     md: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-    // ... shadow scale
+    
   }
 }; 

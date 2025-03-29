@@ -22,6 +22,8 @@ import { SheetExportModal } from './SheetExportModal';
 import { SheetDownloadModal } from './SheetDownloadModal';
 import { SaveSheet } from './SaveSheet';
 import { TaskSheet } from '../types/supabase';
+import { Button } from './common/Button';
+import { TaskEditModal } from './TaskEditModal';
 
 const styles = `
   .solution-text {
@@ -145,12 +147,35 @@ export const TaskPreview = () => {
     setEditingTask(task);
   };
 
-  const handleSave = (updatedTask: Question) => {
-    const newQuestions = questions.map(q => 
-      q.id === updatedTask.id ? updatedTask : q
-    );
-    updateQuestion(questions.findIndex(q => q.id === updatedTask.id), updatedTask);
-    setEditingTask(null);
+  const handleSave = async (updatedTask: Question) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({
+          text: updatedTask.text,
+          type: updatedTask.type,
+          topic: updatedTask.topic,
+          difficulty: updatedTask.difficulty,
+          correct_answer: updatedTask.correctAnswer,
+          answer: updatedTask.answer,
+        })
+        .eq('id', updatedTask.id);
+
+      if (error) throw error;
+
+      // Update local state
+      const newQuestions = questions.map(q => 
+        q.id === updatedTask.id ? updatedTask : q
+      );
+      updateQuestion(questions.findIndex(q => q.id === updatedTask.id), updatedTask);
+
+      setEditingTask(null);
+      showToast('Task updated successfully', 'success');
+    } catch (err) {
+      console.error('Error updating task:', err);
+      showToast('Failed to update task', 'error');
+      throw err;
+    }
   };
 
   const handleCancel = () => {
@@ -280,16 +305,11 @@ export const TaskPreview = () => {
     }
   };
 
-  const handleSaveAsSheet = async (title: string, description?: string) => {
+  const handleSaveAsSheet = async (title: string, tasks: Question[], description?: string) => {
     try {
       setError(null);
       
-      // Get the selected tasks or all tasks if none selected
-      const tasksToSave = selectedTasks.size > 0 
-        ? questions.filter(q => selectedTasks.has(q.id))
-        : questions;
-      
-      if (tasksToSave.length === 0) {
+      if (tasks.length === 0) {
         setError("No tasks selected to save");
         return;
       }
@@ -303,7 +323,7 @@ export const TaskPreview = () => {
       }
       
       // First, save all tasks to the tasks library
-      const tasksForLibrary = tasksToSave.map(task => ({
+      const tasksForLibrary = tasks.map(task => ({
         id: task.id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i) 
           ? task.id 
           : uuidv4(),
@@ -372,9 +392,9 @@ export const TaskPreview = () => {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg p-4 z-10"
+      className="absolute right-0 mt-2 w-72 bg-gray-800 rounded-xl shadow-lg p-4 z-10 border border-gray-700"
     >
-      <h3 className="text-lg font-semibold mb-4">Download Options</h3>
+      <h3 className="text-lg font-semibold mb-4 text-white">Download Options</h3>
       
       <div className="space-y-3 mb-4">
         <label className="flex items-center space-x-2">
@@ -385,9 +405,9 @@ export const TaskPreview = () => {
               ...prev,
               includeSolutions: e.target.checked
             }))}
-            className="rounded border-gray-300"
+            className="rounded border-gray-600 bg-gray-700 text-blue-500"
           />
-          <span>Include Solutions</span>
+          <span className="text-gray-300">Include Solutions</span>
         </label>
         
         <label className="flex items-center space-x-2">
@@ -398,9 +418,9 @@ export const TaskPreview = () => {
               ...prev,
               includeAnswers: e.target.checked
             }))}
-            className="rounded border-gray-300"
+            className="rounded border-gray-600 bg-gray-700 text-blue-500"
           />
-          <span>Include Answers</span>
+          <span className="text-gray-300">Include Answers</span>
         </label>
       </div>
 
@@ -420,7 +440,7 @@ export const TaskPreview = () => {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="bg-white rounded-xl shadow-lg p-8 text-center"
+      className="bg-gray-800 rounded-xl shadow-lg p-8 text-center border border-gray-700"
     >
       <motion.div
         initial={{ scale: 0.9 }}
@@ -428,10 +448,10 @@ export const TaskPreview = () => {
         transition={{ type: "spring", stiffness: 200, damping: 15 }}
       >
         <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+        <h3 className="text-xl font-semibold text-white mb-2">
           No Tasks Available
         </h3>
-        <p className="text-gray-500 mb-8">
+        <p className="text-gray-400 mb-8">
           Get started by creating a new task or generating a task sheet
         </p>
         <div className="flex items-center justify-center gap-4">
@@ -439,8 +459,8 @@ export const TaskPreview = () => {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setIsCreating(true)}
-            className="px-6 py-3 bg-white text-gray-700 border-2 border-gray-200 
-                     rounded-xl hover:bg-gray-50 transition-all duration-200 
+            className="px-6 py-3 bg-gray-700 text-gray-300 border-2 border-gray-600 
+                     rounded-2xl hover:bg-gray-600 transition-all duration-200 
                      flex items-center gap-2 font-medium shadow-sm"
           >
             <Plus className="w-5 h-5" />
@@ -450,7 +470,7 @@ export const TaskPreview = () => {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => navigate('/generate-task')}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl 
+            className="px-6 py-3 bg-blue-600 text-white rounded-2xl 
                      hover:bg-blue-700 transition-all duration-200 
                      flex items-center gap-2 font-medium shadow-md"
           >
@@ -467,10 +487,10 @@ export const TaskPreview = () => {
       <>
         <style>{styles}</style>
         <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="flex items-center justify-between mb-6 bg-white rounded-xl shadow-sm p-4">
+          <div className="flex items-center justify-between mb-6 bg-gray-800 rounded-xl shadow-sm p-4 border border-gray-700">
             <button
               onClick={() => navigate(-1)}
-              className="flex items-center text-gray-600 hover:text-gray-900"
+              className="flex items-center text-gray-300 hover:text-white rounded-full"
             >
               <ArrowLeft className="h-5 w-5 mr-2" />
               {t('tasks.back')}
@@ -481,7 +501,7 @@ export const TaskPreview = () => {
             {renderEmptyState()}
           </div>
 
-          {/* Task Creation Modal */}
+         
           <AnimatePresence>
             {isCreating && (
               <motion.div 
@@ -513,20 +533,20 @@ export const TaskPreview = () => {
     <>
       <style>{styles}</style>
       <div className="max-w-6xl mx-auto px-4 py-8 relative min-h-screen">
-        <div className="flex items-center justify-between mb-6 bg-white rounded-xl shadow-sm p-4">
+        <div className="flex items-center justify-between mb-6 bg-gray-800 rounded-xl shadow-sm p-4 border border-gray-700">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate(-1)}
-              className="flex items-center text-gray-600 hover:text-gray-900"
+              className="flex items-center text-gray-300 hover:text-white rounded-full"
             >
               <ArrowLeft className="h-5 w-5 mr-2" />
               {t('tasks.back')}
             </button>
 
-            {/* Select All and Counter Section */}
+           
             {questions.length > 0 && (
               <>
-                <div className="h-6 w-px bg-gray-200" /> {/* Divider */}
+                <div className="h-6 w-px bg-gray-700" /> 
                 <button
                   onClick={() => {
                     if (selectedTasks.size === questions.length) {
@@ -535,15 +555,15 @@ export const TaskPreview = () => {
                       setSelectedTasks(new Set(questions.map(q => q.id)));
                     }
                   }}
-                  className="text-sm text-gray-600 hover:text-gray-900"
+                  className="text-sm text-gray-300 hover:text-white"
                 >
                   {selectedTasks.size === questions.length ? 'Deselect All' : 'Select All'}
                 </button>
 
                 {selectedTasks.size > 0 && (
                   <>
-                    <div className="h-6 w-px bg-gray-200" /> {/* Divider */}
-                    <span className="text-sm text-gray-600">
+                    <div className="h-6 w-px bg-gray-700" /> 
+                    <span className="text-sm text-gray-300">
                       {selectedTasks.size} task(s) selected
                     </span>
                   </>
@@ -557,7 +577,7 @@ export const TaskPreview = () => {
               <button
                 onClick={() => setIsCreating(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white 
-                         rounded-lg hover:bg-blue-700 transition-colors"
+                         rounded-full hover:bg-blue-700 transition-colors"
               >
                 <PlusCircle className="w-5 h-5" />
                 Create Task
@@ -566,8 +586,8 @@ export const TaskPreview = () => {
             
             <button
               onClick={handleDelete}
-              className="flex items-center gap-2 px-4 py-2 text-red-600
-                       hover:bg-red-50 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-red-400
+                       hover:bg-red-900/30 rounded-full transition-colors"
               disabled={selectedTasks.size === 0}
             >
               <Trash2 className="w-5 h-5" />
@@ -576,7 +596,7 @@ export const TaskPreview = () => {
 
             <button
               onClick={handleDownloadClick}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-full
                        hover:bg-green-700 transition-colors"
               disabled={selectedTasks.size === 0}
             >
@@ -585,18 +605,18 @@ export const TaskPreview = () => {
             </button>
 
             <button
-                onClick={() => setShowSaveSheet(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg
-                         hover:bg-blue-700 transition-colors"
-              >
-                <Save className="w-5 h-5" />
-                Save as Sheet
+              onClick={() => setShowSaveSheet(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-full
+                       hover:bg-blue-700 transition-colors"
+            >
+              <Save className="w-5 h-5" />
+              Save as Sheet
             </button>
           </div>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          <div className="mb-4 p-3 bg-red-900/30 border border-red-500 text-red-300 rounded">
             {error}
           </div>
         )}
@@ -615,9 +635,9 @@ export const TaskPreview = () => {
                       <div
                         ref={provided.innerRef}
                         {...provided.draggableProps}
-                        className={`bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer
-                                  transition-all duration-200 
-                                  ${selectedTasks.has(task.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`}
+                        className={`bg-gray-800 rounded-xl shadow-sm overflow-hidden cursor-pointer
+                                  transition-all duration-200 border border-gray-700
+                                  ${selectedTasks.has(task.id) ? 'ring-2 ring-blue-500 bg-blue-900/30' : ''}`}
                         onClick={() => {
                           const newSelected = new Set(selectedTasks);
                           if (selectedTasks.has(task.id)) {
@@ -630,33 +650,33 @@ export const TaskPreview = () => {
                       >
                         <div className="p-6">
                           <div className="flex items-start gap-4">
-                            {/* Drag Handle */}
+                            
                             <div {...provided.dragHandleProps} className="mt-1">
                               <GripVertical className="h-5 w-5 text-gray-400" />
                             </div>
 
-                            {/* Task Content */}
+                            
                             <div className="flex-1">
-                              <div className="text-lg text-gray-900 mb-2">
+                              <div className="text-lg text-white mb-2">
                                 {formatMathText(task.text)}
                               </div>
                               
-                              {/* Task Metadata */}
-                              <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+                              
+                              <div className="flex items-center gap-4 text-sm text-gray-400 mb-4">
                                 <span>Type: {task.type}</span>
                                 <span>Difficulty: {task.difficulty}</span>
                                 <span>Topic: {task.topic}</span>
                               </div>
 
-                              {/* Actions */}
+                              
                               <div className="flex items-center justify-between">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     toggleTask(task.id);
                                   }}
-                                  className="p-2 text-gray-400 hover:text-gray-600 
-                                           hover:bg-gray-100 rounded-lg transition-colors"
+                                  className="p-2 text-gray-400 hover:text-gray-300 
+                                           hover:bg-gray-700 rounded-full transition-colors"
                                 >
                                   {expandedTasks.has(task.id) ? (
                                     <ChevronUp className="h-5 w-5" />
@@ -669,20 +689,20 @@ export const TaskPreview = () => {
                                     e.stopPropagation();
                                     handleEdit(task);
                                   }}
-                                  className="p-2 text-gray-400 hover:text-gray-600"
+                                  className="p-2 text-gray-400 hover:text-gray-300 hover:bg-gray-700 rounded-full"
                                 >
                                   <Edit2 className="h-5 w-5" />
                                 </button>
                               </div>
 
-                              {/* Expanded Content */}
+                              
                               {expandedTasks.has(task.id) && (
                                 <div className="mt-4 space-y-4 animate-fadeIn">
                                   <div className="pl-4 border-l-4 border-green-500">
-                                    <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                                    <h4 className="text-sm font-semibold text-gray-300 mb-1">
                                       {t('tasks.solution')}:
                                     </h4>
-                                    <div className="text-gray-600 whitespace-pre-line solution-text">
+                                    <div className="text-gray-400 whitespace-pre-line solution-text">
                                       {task.explanation ? (
                                         formatMathText(task.explanation)
                                       ) : task.correctAnswer ? (
@@ -695,10 +715,10 @@ export const TaskPreview = () => {
 
                                   {task.answer && (
                                     <div className="pl-4 border-l-4 border-blue-500">
-                                      <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                                      <h4 className="text-sm font-semibold text-gray-300 mb-1">
                                         {t('tasks.answer')}:
                                       </h4>
-                                      <div className="text-gray-600">
+                                      <div className="text-gray-400">
                                         {formatMathText(task.answer)}
                                       </div>
                                     </div>
@@ -721,7 +741,7 @@ export const TaskPreview = () => {
         <div className="fixed bottom-8 right-8">
           <button
             onClick={handleStartPractice}
-            className="flex items-center px-6 py-3 bg-green-600 text-white rounded-xl
+            className="flex items-center px-6 py-3 bg-green-600 text-white rounded-full
                      hover:bg-green-700 transition-colors duration-200 shadow-lg
                      hover:shadow-xl transform hover:scale-105 transition-all"
           >
@@ -731,33 +751,18 @@ export const TaskPreview = () => {
         </div>
       </div>
 
-      {/* Task Editor Modal */}
+      
       <AnimatePresence>
         {editingTask && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="task-editor-overlay"
-          >
-            <motion.div
-              initial={{ y: -20 }}
-              animate={{ y: 0 }}
-              exit={{ y: -20 }}
-              className="w-full max-w-3xl mx-4"
-            >
-              <TaskEditor
-                task={editingTask}
-                onSave={handleSave}
-                onCancel={handleCancel}
-                mode="edit"
-              />
-            </motion.div>
-          </motion.div>
+          <TaskEditModal
+            task={editingTask}
+            onSave={handleSave}
+            onClose={() => setEditingTask(null)}
+          />
         )}
       </AnimatePresence>
 
-      {/* Task Creation Modal */}
+      
       <AnimatePresence>
         {isCreating && (
           <motion.div 
@@ -781,46 +786,48 @@ export const TaskPreview = () => {
         )}
       </AnimatePresence>
 
-      {/* Delete Confirmation Modal */}
+      
       <AnimatePresence>
         {showDeleteConfirm && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="delete-confirm-overlay"
+            className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50"
           >
             <motion.div
               initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
-              className="bg-white rounded-xl shadow-xl p-6 max-w-md mx-4 w-full"
+              className="bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md mx-4 w-full
+                       border border-gray-700"
             >
               <div className="text-center">
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
-                  <AlertTriangle className="h-6 w-6 text-red-600" />
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full 
+                              bg-red-900/30 mb-6">
+                  <AlertTriangle className="h-6 w-6 text-red-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                <h3 className="text-xl font-semibold text-white mb-2">
                   Confirm Deletion
                 </h3>
-                <p className="text-sm text-gray-500 mb-6">
+                <p className="text-sm text-gray-400 mb-8">
                   Are you sure you want to permanently delete {selectedTasks.size} task(s)? This action cannot be undone.
                 </p>
                 <div className="flex justify-end gap-3">
-                  <button
+                  <Button
+                    variant="ghost"
                     onClick={() => setShowDeleteConfirm(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg
-                             hover:bg-gray-200 transition-colors"
+                    className="text-gray-300 hover:bg-gray-700"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="primary"
                     onClick={confirmDelete}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg
-                             hover:bg-red-700 transition-colors"
+                    className="bg-red-600 text-white hover:bg-red-700"
                   >
                     Delete Tasks
-                  </button>
+                  </Button>
                 </div>
               </div>
             </motion.div>
@@ -828,17 +835,18 @@ export const TaskPreview = () => {
         )}
       </AnimatePresence>
 
-      {/* Save Sheet Modal */}
+      
       <AnimatePresence>
         {showSaveSheet && (
           <SaveSheet
+            selectedTasks={questions.filter(task => selectedTasks.has(task.id))}
             onSave={handleSaveAsSheet}
             onClose={() => setShowSaveSheet(false)}
           />
         )}
       </AnimatePresence>
 
-      {/* Download Modal */}
+      
       <AnimatePresence>
         {showDownloadModal && (
           <SheetDownloadModal
@@ -849,7 +857,7 @@ export const TaskPreview = () => {
         )}
       </AnimatePresence>
 
-      {/* Export Modal */}
+      
       <AnimatePresence>
         {showExportModal && (
           <SheetExportModal

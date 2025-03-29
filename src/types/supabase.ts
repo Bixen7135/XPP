@@ -12,7 +12,8 @@ export interface Database {
       profiles: {
         Row: {
           id: string
-          username: string
+          first_name: string
+          last_name: string
           avatar_url: string | null
           preferences: Json | null
           created_at: string
@@ -20,7 +21,8 @@ export interface Database {
         }
         Insert: {
           id: string
-          username: string
+          first_name: string
+          last_name: string
           avatar_url?: string | null
           preferences?: Json | null
           created_at?: string
@@ -28,7 +30,8 @@ export interface Database {
         }
         Update: {
           id?: string
-          username?: string
+          first_name?: string
+          last_name?: string
           avatar_url?: string | null
           preferences?: Json | null
           created_at?: string
@@ -110,8 +113,18 @@ export interface TaskSheet {
   user_id: string;
   title: string;
   description?: string;
-  tasks: string[]; // Array of task IDs
+  tasks: string[]; 
   tags?: string[];
   created_at: string;
   updated_at: string;
 }
+
+export interface User {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  avatar_url?: string;
+  created_at: string;
+  updated_at: string;
+} 

@@ -9,7 +9,7 @@ interface SheetAnalyticsProps {
 }
 
 export const SheetAnalytics: React.FC<SheetAnalyticsProps> = ({ tasks, onClose }) => {
-  // Calculate analytics
+  
   const difficultyDistribution = {
     easy: tasks.filter(t => t.difficulty === 'easy').length,
     medium: tasks.filter(t => t.difficulty === 'medium').length,

@@ -10,7 +10,7 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const location = useLocation();
 
   if (!initialized) {
-    return null; // or a loading spinner
+    return null; 
   }
 
   if (!user) {

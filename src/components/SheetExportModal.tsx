@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, FileText, Download, Check, Settings } from 'lucide-react';
+import { X, FileText, Download, Check } from 'lucide-react';
 import { Button } from './common/Button';
 import { downloadDocument, DocumentOptions } from '../services/documentGenerator';
 import { Question } from '../types/exam';
@@ -34,7 +34,7 @@ export const SheetExportModal: React.FC<SheetExportModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Export error:', error);
-      // Handle error
+      
     } finally {
       setExporting(false);
     }
@@ -45,115 +45,151 @@ export const SheetExportModal: React.FC<SheetExportModalProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4"
     >
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-xl shadow-xl w-full max-w-md"
+        initial={{ scale: 0.95 }}
+        animate={{ scale: 1 }}
+        exit={{ scale: 0.95 }}
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-md mx-auto w-full border border-gray-200 dark:border-gray-700"
       >
-        <div className="p-6 border-b">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Export Sheet</h2>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Export Sheet</h2>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-full transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        
-        <div className="p-6">
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Format</h3>
-            <div className="grid grid-cols-2 gap-4">
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Format
+            </label>
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setFormat('pdf')}
-                className={`p-4 border rounded-lg flex flex-col items-center ${
-                  format === 'pdf' 
-                    ? 'border-blue-500 bg-blue-50' 
-                    : 'border-gray-200 hover:border-blue-300'
+                className={`p-3 flex items-center justify-center rounded-lg border-2 transition-colors ${
+                  format === 'pdf'
+                    ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/10'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-200 dark:hover:border-blue-500/30'
                 }`}
               >
-                <FileText className={`w-8 h-8 mb-2 ${format === 'pdf' ? 'text-blue-600' : 'text-gray-400'}`} />
-                <span className={format === 'pdf' ? 'text-blue-600 font-medium' : 'text-gray-600'}>PDF</span>
+                <span className={`text-sm font-medium ${
+                  format === 'pdf'
+                    ? 'text-blue-700 dark:text-blue-400'
+                    : 'text-gray-900 dark:text-gray-100'
+                }`}>
+                  PDF
+                </span>
               </button>
               <button
                 onClick={() => setFormat('docx')}
-                className={`p-4 border rounded-lg flex flex-col items-center ${
-                  format === 'docx' 
-                    ? 'border-blue-500 bg-blue-50' 
-                    : 'border-gray-200 hover:border-blue-300'
+                className={`p-3 flex items-center justify-center rounded-lg border-2 transition-colors ${
+                  format === 'docx'
+                    ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/10'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-200 dark:hover:border-blue-500/30'
                 }`}
               >
-                <FileText className={`w-8 h-8 mb-2 ${format === 'docx' ? 'text-blue-600' : 'text-gray-400'}`} />
-                <span className={format === 'docx' ? 'text-blue-600 font-medium' : 'text-gray-600'}>DOCX</span>
+                <span className={`text-sm font-medium ${
+                  format === 'docx'
+                    ? 'text-blue-700 dark:text-blue-400'
+                    : 'text-gray-900 dark:text-gray-100'
+                }`}>
+                  Word
+                </span>
               </button>
             </div>
           </div>
-          
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Content Options</h3>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Options
+            </label>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-gray-600">Include Solutions</label>
-                <button
-                  onClick={() => setOptions({...options, includeSolutions: !options.includeSolutions})}
-                  className={`w-10 h-6 rounded-full transition-colors ${
-                    options.includeSolutions ? 'bg-blue-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <span className={`block w-4 h-4 bg-white rounded-full transform transition-transform ${
-                    options.includeSolutions ? 'translate-x-5' : 'translate-x-1'
-                  }`}></span>
-                </button>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <label className="text-gray-600">Include Answers</label>
-                <button
-                  onClick={() => setOptions({...options, includeAnswers: !options.includeAnswers})}
-                  className={`w-10 h-6 rounded-full transition-colors ${
-                    options.includeAnswers ? 'bg-blue-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <span className={`block w-4 h-4 bg-white rounded-full transform transition-transform ${
-                    options.includeAnswers ? 'translate-x-5' : 'translate-x-1'
-                  }`}></span>
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          <div className="mb-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Task Summary</h3>
-            <div className="bg-gray-50 rounded-lg p-3 text-sm">
-              <p><span className="font-medium">Tasks:</span> {tasks.length}</p>
-              <p><span className="font-medium">Types:</span> {Array.from(new Set(tasks.map(t => t.type))).join(', ')}</p>
-              <p><span className="font-medium">Title:</span> {sheetTitle}</p>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={options.includeSolutions}
+                  onChange={(e) => setOptions({ ...options, includeSolutions: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 dark:text-blue-400 border-gray-300 dark:border-gray-600 rounded
+                           focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0"
+                />
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">Include solutions</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={options.includeAnswers}
+                  onChange={(e) => setOptions({ ...options, includeAnswers: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 dark:text-blue-400 border-gray-300 dark:border-gray-600 rounded
+                           focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0"
+                />
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">Include answers</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={options.includeAnswerSpaces}
+                  onChange={(e) => setOptions({ ...options, includeAnswerSpaces: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 dark:text-blue-400 border-gray-300 dark:border-gray-600 rounded
+                           focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0"
+                />
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">Include answer spaces</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={options.includeInstructions}
+                  onChange={(e) => setOptions({ ...options, includeInstructions: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 dark:text-blue-400 border-gray-300 dark:border-gray-600 rounded
+                           focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0"
+                />
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">Include instructions</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={options.includeContext}
+                  onChange={(e) => setOptions({ ...options, includeContext: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 dark:text-blue-400 border-gray-300 dark:border-gray-600 rounded
+                           focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0"
+                />
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">Include context</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={options.includeLearningOutcomes}
+                  onChange={(e) => setOptions({ ...options, includeLearningOutcomes: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 dark:text-blue-400 border-gray-300 dark:border-gray-600 rounded
+                           focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0"
+                />
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">Include learning outcomes</span>
+              </label>
             </div>
           </div>
         </div>
-        
-        <div className="p-6 border-t">
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="ghost"
-              onClick={onClose}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              icon={<Download className="w-4 h-4" />}
-              onClick={handleExport}
-              isLoading={exporting}
-            >
-              Export
-            </Button>
-          </div>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 
+                     rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg
+                     hover:bg-blue-700 dark:hover:bg-blue-600 
+                     disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {exporting ? 'Exporting...' : 'Export'}
+          </button>
         </div>
       </motion.div>
     </motion.div>

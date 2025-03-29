@@ -24,39 +24,31 @@ export const Login = () => {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl shadow-xl p-8"
+        className="bg-gray-800 rounded-2xl shadow-xl p-8 border border-gray-700"
       >
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
-          <p className="text-gray-600 mt-2">Sign in to your account</p>
+          <h1 className="text-2xl font-bold text-white">Welcome Back</h1>
+          <p className="text-gray-400 mt-2">Sign in to your account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-red-50 text-red-600 p-4 rounded-lg text-sm"
-            >
-              {error}
-            </motion.div>
-          )}
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address
+            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
+              Email
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
+                id="email"
                 type="email"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
                   clearError();
                 }}
-                className="pl-10 pr-4 py-3 w-full border rounded-xl focus:ring-2 
-                         focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg
+                         text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 
+                         focus:border-blue-500"
                 placeholder="Enter your email"
                 required
               />
@@ -64,37 +56,46 @@ export const Login = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
                   clearError();
                 }}
-                className="pl-10 pr-4 py-3 w-full border rounded-xl focus:ring-2 
-                         focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg
+                         text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 
+                         focus:border-blue-500"
                 placeholder="Enter your password"
                 required
               />
             </div>
           </div>
 
+          {error && (
+            <div className="text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 bg-blue-600 text-white rounded-xl
-                     font-medium hover:bg-blue-700 focus:outline-none 
-                     focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-                     disabled:bg-blue-400 disabled:cursor-not-allowed
-                     transition-colors duration-200"
+            className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white
+                     rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50
+                     disabled:cursor-not-allowed"
           >
             {loading ? (
-              <Loader2 className="animate-spin h-5 w-5 mx-auto" />
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Signing in...
+              </>
             ) : (
               'Sign In'
             )}
@@ -102,9 +103,9 @@ export const Login = () => {
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-gray-600">
+          <p className="text-gray-400">
             Don't have an account?{' '}
-            <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+            <Link to="/register" className="text-blue-400 hover:text-blue-300">
               Sign up
             </Link>
           </p>

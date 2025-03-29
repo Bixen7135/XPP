@@ -12,13 +12,19 @@ export interface ExamConfig {
   includeAnswers?: boolean;
 }
 
-export interface TaskConfig {
+export type DifficultyDistribution = {
+  easy: number;
+  medium: number;
+  hard: number;
+};
+
+export type TaskConfig = {
   type: string;
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: DifficultyDistribution;
   topics: string[];
   count: number;
-  subject?: string;
-}
+  subject: string;
+};
 
 export interface Question {
   id: string;

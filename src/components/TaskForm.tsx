@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useExamStore } from '../store/examStore';
 import { generateTasks } from '../services/openai';
-import type { TaskConfig } from '../types/exam';
-import { Loader2, BookOpen, Settings2, CheckCircle2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import type { TaskConfig, DifficultyDistribution } from '../types/exam';
+import { Loader2, BookOpen, Settings2, CheckCircle2, ChevronDown, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { PageLayout } from './common/PageLayout';
 
 type TaskType = {
   value: string;
   label: string;
-  subjects: string[]; // subjects this task type is applicable to
+  subjects: string[]; 
 };
 
 const taskTypes: TaskType[] = [
@@ -150,25 +150,190 @@ function validateConfig(config: TaskConfig): string | null {
   return null;
 }
 
+const DifficultySlider = ({ 
+  value, 
+  onChange 
+}: { 
+  value: DifficultyDistribution;
+  onChange: (distribution: DifficultyDistribution) => void;
+}) => {
+  const firstPoint = useMotionValue(value.easy);
+  const secondPoint = useMotionValue(value.easy + value.medium);
+
+
+  const easyPercentage = useTransform(firstPoint, (v: number) => Math.round(v));
+  const mediumPercentage = useTransform<number[], number>(
+    [firstPoint, secondPoint] as any, 
+    (latest: number[]) => Math.round(latest[1] - latest[0])
+  );
+  const hardPercentage = useTransform(secondPoint, (v: number) => Math.round(100 - v));
+
+  const updateDistribution = (first: number, second: number) => {
+    const easy = Math.round(first);
+    const medium = Math.round(second - first);
+    const hard = Math.round(100 - second);
+    onChange({ easy, medium, hard });
+  };
+
+  const handleDrag = (point: 'first' | 'second', event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.currentTarget) return;
+    
+    const container = event.currentTarget.parentElement;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const percentage = Math.min(100, Math.max(0, (x / container.offsetWidth) * 100));
+
+    if (point === 'first') {
+      const newX = Math.max(0, Math.min(secondPoint.get() - 5, percentage));
+      firstPoint.set(newX);
+      updateDistribution(newX, secondPoint.get());
+    } else {
+      const newX = Math.max(firstPoint.get() + 5, Math.min(100, percentage));
+      secondPoint.set(newX);
+      updateDistribution(firstPoint.get(), newX);
+    }
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const element = e.currentTarget;
+    element.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const element = e.currentTarget;
+    element.releasePointerCapture(e.pointerId);
+  };
+
+  return (
+    <div className="w-full space-y-6">
+      <div className="relative h-2 bg-gray-700 rounded-full">
+        <motion.div 
+          className="absolute inset-0 bg-green-500 rounded-l-full" 
+          style={{ width: useTransform(firstPoint, (v: number) => `${v}%`) }} 
+        />
+        <motion.div 
+          className="absolute inset-0 bg-yellow-500" 
+          style={{ 
+            left: useTransform(firstPoint, (v: number) => `${v}%`),
+            width: useTransform<number[], string>(
+              [firstPoint, secondPoint] as any,
+              (latest: number[]) => `${latest[1] - latest[0]}%`
+            )
+          }} 
+        />
+        <motion.div 
+          className="absolute inset-0 bg-red-500 rounded-r-full" 
+          style={{ 
+            left: useTransform(secondPoint, (v: number) => `${v}%`),
+            width: useTransform(secondPoint, (v: number) => `${100 - v}%`)
+          }} 
+        />
+        
+        <motion.div
+          drag="x"
+          dragMomentum={false}
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0}
+          className="absolute w-4 h-4 bg-white rounded-full 
+                     shadow-lg cursor-pointer border-2 border-gray-200 
+                     hover:scale-110 transition-transform z-10"
+          style={{ 
+            left: useTransform(firstPoint, (v: number) => `${v}%`),
+            top: '-6px'
+          }}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerMove={(e) => {
+            if (e.buttons === 1) {
+              handleDrag('first', e);
+            }
+          }}
+        />
+        <motion.div
+          drag="x"
+          dragMomentum={false}
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0}
+          className="absolute w-4 h-4 bg-white rounded-full 
+                     shadow-lg cursor-pointer border-2 border-gray-200 
+                     hover:scale-110 transition-transform z-10"
+          style={{ 
+            left: useTransform(secondPoint, (v: number) => `${v}%`),
+            top: '-6px'
+          }}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerMove={(e) => {
+            if (e.buttons === 1) {
+              handleDrag('second', e);
+            }
+          }}
+        />
+      </div>
+
+      <div className="flex justify-between text-sm">
+        <div className="space-y-1 text-center">
+          <div className="text-green-500 font-medium">
+            {easyPercentage.get()}%
+          </div>
+          <div className="text-gray-400">easy</div>
+        </div>
+        <div className="space-y-1 text-center">
+          <div className="text-yellow-500 font-medium">
+            {mediumPercentage.get()}%
+          </div>
+          <div className="text-gray-400">medium</div>
+        </div>
+        <div className="space-y-1 text-center">
+          <div className="text-red-500 font-medium">
+            {hardPercentage.get()}%
+          </div>
+          <div className="text-gray-400">hard</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const TaskForm = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const { setTaskConfig, setQuestions } = useExamStore();
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [customTopic, setCustomTopic] = useState('');
-  const [, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
+  const [difficultyDistribution, setDifficultyDistribution] = useState<DifficultyDistribution>({
+    easy: 20,
+    medium: 44,
+    hard: 36
+  });
+
+  const handleTopicChange = (topic: string) => {
+    setSelectedTopics(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(topic)) {
+        newSet.delete(topic);
+      } else {
+        newSet.add(topic);
+      }
+      return newSet;
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     
     const topics = customTopic 
-      ? [...formData.getAll('topics') as string[], customTopic]
-      : formData.getAll('topics') as string[];
+      ? [...Array.from(selectedTopics), customTopic]
+      : Array.from(selectedTopics);
 
     const config: TaskConfig = {
       type: formData.get('type') as string,
-      difficulty: formData.get('difficulty') as TaskConfig['difficulty'],
+      difficulty: difficultyDistribution,
       topics,
       count: Number(formData.get('count')),
       subject: selectedSubject
@@ -199,180 +364,249 @@ export const TaskForm = () => {
 
   return (
     <PageLayout maxWidth="xl">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-4xl mx-auto"
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-2xl shadow-lg p-8"
-        >
-          <div className="flex items-center gap-4 mb-8 pb-6 border-b">
-            <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <BookOpen className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Generate Task Sheet
-              </h1>
-              <p className="text-gray-600 mt-1">
-                Create custom practice tasks for your students
-              </p>
-            </div>
-          </div>
+      <div className="w-full min-h-[calc(100vh-6rem)] flex items-center justify-center py-12 px-4">
+        <div className="max-w-6xl w-full">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-8"
+          >
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent mb-4">
+              Generate Task Sheet
+            </h1>
+            <p className="text-lg text-gray-400">
+              Configure your task generation settings
+            </p>
+          </motion.div>
 
-          <form onSubmit={handleSubmit} className="space-y-8">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Subject
-              </label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {Object.keys(subjects).map((subject) => (
-                  <button
-                    key={subject}
-                    type="button"
-                    onClick={() => setSelectedSubject(subject)}
-                    className={`p-4 rounded-xl border-2 text-left ${
-                      selectedSubject === subject
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="bg-gray-900/50 backdrop-blur-xl rounded-3xl shadow-2xl p-8 
+                     border border-gray-800/50 relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-pink-500/5" />
+            <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
+            <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
+
+            <div className="relative">
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="bg-red-500/10 backdrop-blur-sm border border-red-500/20 rounded-xl p-4 mb-6"
                   >
-                    <span className="font-medium text-gray-900">{subject}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+                    <div className="flex items-center gap-3 text-red-400">
+                      <AlertTriangle className="w-5 h-5" />
+                      <p className="text-sm font-medium">{error}</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-            {selectedSubject && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Topics
-                  </label>
-                  <div className="grid grid-cols-2 gap-4">
-                    {subjects[selectedSubject].map((topic) => (
-                      <label key={topic} className="relative flex items-center p-4 rounded-xl border-2 cursor-pointer
-                                                 hover:border-blue-500 transition-colors">
-                        <input
-                          type="checkbox"
-                          name="topics"
-                          value={topic}
-                          className="peer sr-only"
-                        />
-                        <div className="peer-checked:border-blue-500 peer-checked:bg-blue-50 absolute inset-0 rounded-xl border-2 pointer-events-none"></div>
-                        <div className="relative z-10 flex items-center">
-                          <CheckCircle2 className="w-5 h-5 text-blue-600 mr-3 opacity-0 peer-checked:opacity-100" />
-                          <span className="text-gray-700 peer-checked:text-blue-600">{topic}</span>
+              <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-1 space-y-6">
+                    <div className="bg-gray-800/30 backdrop-blur-sm rounded-2xl border border-gray-700/50 p-6">
+                      <h3 className="text-xl font-semibold text-gray-200 mb-6 flex items-center gap-2">
+                        <Settings2 className="w-5 h-5 text-blue-400" />
+                        Basic Settings
+                      </h3>
+                      
+                      <div className="space-y-5">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Subject
+                          </label>
+                          <div className="relative">
+                            <select
+                              value={selectedSubject}
+                              onChange={(e) => setSelectedSubject(e.target.value)}
+                              className="w-full p-3 rounded-lg bg-gray-900/50 text-gray-200
+                                       border border-gray-700/50 appearance-none
+                                       focus:ring-2 focus:ring-blue-500/50 
+                                       focus:border-blue-500/50
+                                       transition-all duration-200"
+                              required
+                            >
+                              <option value="">Select a subject</option>
+                              {Object.keys(subjects).map(subject => (
+                                <option key={subject} value={subject}>
+                                  {subject}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" />
+                          </div>
                         </div>
-                      </label>
-                    ))}
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Task Type
+                          </label>
+                          <div className="relative">
+                            <select
+                              name="type"
+                              className="w-full p-3 rounded-lg bg-gray-900/50 text-gray-200
+                                       border border-gray-700/50 appearance-none
+                                       focus:ring-2 focus:ring-blue-500/50 
+                                       focus:border-blue-500/50
+                                       transition-all duration-200"
+                              required
+                            >
+                              <option value="">Select task type</option>
+                              {taskTypes
+                                .filter(type => type.subjects.includes('all') || type.subjects.includes(selectedSubject))
+                                .map(type => (
+                                  <option key={type.value} value={type.value}>
+                                    {type.label}
+                                  </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Number of Tasks
+                          </label>
+                          <input
+                            type="number"
+                            name="count"
+                            min="1"
+                            max="20"
+                            defaultValue="5"
+                            className="w-full p-3 rounded-lg bg-gray-900/50 text-gray-200
+                                     border border-gray-700/50
+                                     focus:ring-2 focus:ring-blue-500/50 
+                                     focus:border-blue-500/50
+                                     transition-all duration-200"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-800/30 backdrop-blur-sm rounded-2xl border border-gray-700/50 p-6">
+                      <h3 className="text-xl font-semibold text-gray-200 mb-6">Difficulty Distribution</h3>
+                      <DifficultySlider 
+                        value={difficultyDistribution} 
+                        onChange={setDifficultyDistribution} 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    {selectedSubject ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-gray-800/30 backdrop-blur-sm rounded-2xl border border-gray-700/50 p-6 h-full"
+                      >
+                        <h3 className="text-xl font-semibold text-gray-200 mb-6 flex items-center gap-2">
+                          <BookOpen className="w-5 h-5 text-blue-400" />
+                          Topics Selection
+                        </h3>
+
+                        <div className="space-y-6">
+                          <div className="bg-gray-900/30 rounded-xl border border-gray-700/50 p-4 max-h-[400px] overflow-y-auto">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {subjects[selectedSubject].map(topic => (
+                                <label
+                                  key={topic}
+                                  className="relative flex items-center p-3 rounded-lg 
+                                           border border-gray-700/50 cursor-pointer
+                                           bg-gray-900/30
+                                           hover:bg-gray-800/50 hover:border-blue-500/50 
+                                           transition-all duration-200"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedTopics.has(topic)}
+                                    onChange={() => handleTopicChange(topic)}
+                                    className="w-5 h-5 rounded border-gray-600 text-blue-500 
+                                             focus:ring-2 focus:ring-blue-500/50 
+                                             bg-gray-700"
+                                  />
+                                  <span className="ml-3 text-gray-300">{topic}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                              Custom Topic (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              value={customTopic}
+                              onChange={(e) => setCustomTopic(e.target.value)}
+                              placeholder="Enter your custom topic"
+                              className="w-full p-3 rounded-lg bg-gray-900/50 text-gray-200
+                                       border border-gray-700/50
+                                       focus:ring-2 focus:ring-blue-500/50 
+                                       focus:border-blue-500/50
+                                       transition-all duration-200
+                                       placeholder-gray-500"
+                            />
+                          </div>
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <div className="h-full flex items-center justify-center">
+                        <div className="text-center text-gray-400">
+                          <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p className="text-lg">Select a subject to view available topics</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="bg-gray-50 rounded-xl p-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Custom Topic (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={customTopic}
-                    onChange={(e) => setCustomTopic(e.target.value)}
-                    placeholder="Enter a custom topic"
-                    className="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 
-                             focus:ring-blue-500 bg-white"
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Task Type
-                </label>
-                <select
-                  name="type"
-                  className="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 
-                           focus:ring-blue-500 bg-white"
-                  required
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className="pt-6"
                 >
-                  <option value="">Select type</option>
-                  {taskTypes
-                    .filter(type => 
-                      type.subjects.includes('all') || 
-                      type.subjects.includes(selectedSubject)
-                    )
-                    .map(type => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Difficulty Level
-                </label>
-                <select
-                  name="difficulty"
-                  className="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 
-                           focus:ring-blue-500 bg-white"
-                  required
-                >
-                  <option value="">Select difficulty</option>
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </select>
-              </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full p-4 rounded-xl bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600
+                             text-white font-semibold text-lg
+                             hover:from-blue-700 hover:via-purple-700 hover:to-pink-700
+                             focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-gray-900
+                             disabled:opacity-50 disabled:cursor-not-allowed
+                             transition-all duration-200
+                             backdrop-blur-sm
+                             flex items-center justify-center gap-3
+                             shadow-[0_0_30px_-5px_rgba(59,130,246,0.5)]
+                             hover:shadow-[0_0_30px_-5px_rgba(59,130,246,0.7)]"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                        Generating Tasks...
+                      </>
+                    ) : (
+                      <>
+                        <BookOpen className="w-6 h-6" />
+                        Generate Tasks
+                      </>
+                    )}
+                  </button>
+                </motion.div>
+              </form>
             </div>
-
-            <div className="bg-gray-50 rounded-xl p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Number of Tasks
-              </label>
-              <input
-                type="number"
-                name="count"
-                min="1"
-                max="20"
-                defaultValue="5"
-                className="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 
-                         focus:ring-blue-500 bg-white"
-                required
-              />
-            </div>
-
-            <div className="flex justify-end pt-6">
-              <button
-                type="submit"
-                disabled={loading || !selectedSubject}
-                className="flex items-center justify-center px-8 py-4 bg-blue-600 text-white rounded-xl
-                         font-semibold hover:bg-blue-700 transition-all duration-200 transform hover:scale-105
-                         shadow-lg hover:shadow-xl disabled:bg-blue-400 disabled:cursor-not-allowed
-                         disabled:transform-none min-w-[180px]"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin mr-2 h-5 w-5" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Settings2 className="h-5 w-5 mr-2" />
-                    Generate Tasks
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </motion.div>
-      </motion.div>
+          </motion.div>
+        </div>
+      </div>
     </PageLayout>
   );
 };

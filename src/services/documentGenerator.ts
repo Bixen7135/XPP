@@ -13,16 +13,16 @@ export interface DocumentOptions {
 }
 
 const formatMathText = (text: string): string => {
-  // Remove LaTeX delimiters for plain text
+  
   return text.replace(/\\\((.*?)\\\)/g, '$1')
             .replace(/\\\[(.*?)\\\]/g, '$1');
 };
 
-// Add task type configurations
+
 const taskTypeConfigs: Record<string, {
-  answerSpacing: number;  // Additional space in points/lines
-  includeAnswerBox: boolean;  // Whether to include a box for answers
-  answerFormat?: string;  // Special formatting instructions
+  answerSpacing: number;  
+  includeAnswerBox: boolean;  
+  answerFormat?: string;  
 }> = {
   'Essay': {
     answerSpacing: 100,
@@ -73,17 +73,16 @@ const taskTypeConfigs: Record<string, {
 };
 
 const generateAnswerSpace = (task: Question) => {
-  switch (task.type) {
+  switch (task.type.toLowerCase()) {
     case 'multiple-choice':
-      return `
-        □ A    □ B    □ C    □ D
-      `;
+      
+      return '';
     case 'short-answer':
       return `
         Answer: ________________________________
       `;
     case 'essay':
-      // Create a larger space for essay responses
+      
       return `
         
         
@@ -92,7 +91,7 @@ const generateAnswerSpace = (task: Question) => {
         
       `;
     case 'calculation':
-      // Space for calculations and final answer
+      
       return `
         Work space:
         
@@ -106,8 +105,7 @@ const generateAnswerSpace = (task: Question) => {
         □ True    □ False
       `;
     case 'matching':
-      // Generate matching spaces based on the options in the task
-      // This is a simplified example
+      
       return `
         Matching answers:
         
@@ -145,13 +143,13 @@ export async function generatePDF(
     return y + (lines.length * fontSize / 2) + 5;
   };
 
-  // Add title
+  
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.text(title, pageWidth / 2, y, { align: 'center' });
   y += 10;
 
-  // First section: Tasks only
+  
   tasks.forEach((task, index) => {
     const typeConfig = taskTypeConfigs[task.type] || { answerSpacing: 20, includeAnswerBox: false };
 
@@ -160,11 +158,11 @@ export async function generatePDF(
       y = margin;
     }
 
-    // Task number and text
+    
     doc.setFont('helvetica', 'bold');
     y = addWrappedText(`${index + 1}. ${task.text}`, margin, y, 12);
     
-    // Add context if enabled
+    
     if (options.includeContext && task.context) {
       y += 5;
       doc.setFont('helvetica', 'italic');
@@ -174,7 +172,7 @@ export async function generatePDF(
       y += (contextLines.length * 5) + 5;
     }
     
-    // Add instructions if enabled
+    
     if (options.includeInstructions && task.instructions) {
       doc.setFont('helvetica', 'italic');
       doc.setFontSize(10);
@@ -183,7 +181,7 @@ export async function generatePDF(
       y += (instructionLines.length * 5) + 5;
     }
     
-    // Add learning outcomes if enabled
+    
     if (options.includeLearningOutcomes && task.learningOutcome) {
       doc.setFont('helvetica', 'italic');
       doc.setFontSize(10);
@@ -192,44 +190,34 @@ export async function generatePDF(
       y += (outcomeLines.length * 5) + 5;
     }
 
-    // Add answer space if needed
-    if (options.includeAnswerSpaces) {
-      // Add answer format instruction
+    
+    if (options.includeAnswerSpaces && task.type.toLowerCase() !== 'multiple choice') {
+      
       if (typeConfig.answerFormat) {
         doc.setFont('helvetica', 'italic');
         y = addWrappedText(typeConfig.answerFormat, margin, y + 5, 10);
       }
 
-      // Draw answer box or lines based on task type
+      
       doc.setDrawColor(100, 100, 100);
       doc.setLineWidth(0.5);
       
       switch(task.type.toLowerCase()) {
         case 'multiple-choice':
-          // Add multiple choice boxes without extra space
-          const choices = ['A', 'B', 'C', 'D'];
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(10);
           
-          for (let i = 0; i < choices.length; i++) {
-            // Draw checkbox
-            doc.rect(margin + (i * 40), y, 12, 12);
-            // Add letter
-            doc.text(choices[i], margin + 20 + (i * 40), y + 8);
-          }
-          y += 25; // Minimal space after options
+          y += 5; 
           break;
           
         case 'true-false':
-          // Add true/false boxes
+          
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(10);
           
-          // True checkbox
+          
           doc.rect(margin, y, 12, 12);
           doc.text('True', margin + 20, y + 8);
           
-          // False checkbox
+          
           doc.rect(margin + 80, y, 12, 12);
           doc.text('False', margin + 100, y + 8);
           
@@ -237,23 +225,23 @@ export async function generatePDF(
           break;
           
         case 'essay':
-          // Create a large box for essay responses
+          
           doc.rect(margin, y, maxWidth, 150);
           y += 160;
           break;
           
         case 'calculation':
-          // Space for calculations with a box
+          
           doc.setFont('helvetica', 'italic');
           doc.setFontSize(10);
           doc.text('Work space:', margin, y);
           y += 10;
           
-          // Work space box
+          
           doc.rect(margin, y, maxWidth, 100);
           y += 110;
           
-          // Final answer line
+          
           doc.setFont('helvetica', 'normal');
           doc.text('Final answer:', margin, y);
           doc.line(margin + 60, y, pageWidth - margin, y);
@@ -261,7 +249,7 @@ export async function generatePDF(
           break;
           
         case 'matching':
-          // Generate matching boxes
+          
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(10);
           
@@ -274,17 +262,17 @@ export async function generatePDF(
           break;
           
         default:
-          // For other types, create a standard answer box
+          
           if (typeConfig.answerSpacing >= 60) {
-            // Large answer box for longer answers
+            
             doc.rect(margin, y, maxWidth, typeConfig.answerSpacing);
             y += typeConfig.answerSpacing + 10;
           } else {
-            // Answer line for shorter answers
+            
             doc.text('Answer:', margin, y);
             doc.line(margin + 40, y, pageWidth - margin, y);
             
-            // Add a few more lines for multi-line answers
+            
             for (let i = 1; i < 3; i++) {
               doc.line(margin, y + (i * 15), pageWidth - margin, y + (i * 15));
             }
@@ -293,7 +281,7 @@ export async function generatePDF(
           }
       }
     } else {
-      // Add the generated answer space based on task type
+     
       const answerSpace = generateAnswerSpace(task);
       y = addWrappedText(answerSpace, margin, y, 10);
     }
@@ -301,13 +289,13 @@ export async function generatePDF(
     y += 10;
   });
 
-  // Second section: Solutions and answers (if enabled)
+  
   if (options.includeSolutions || options.includeAnswers) {
-    // Add a page break before solutions section
+    
     doc.addPage();
     y = margin;
     
-    // Add solutions header
+    
     doc.setFont('helvetica', 'bold');
     y = addWrappedText("Solutions and Answers", pageWidth / 2, y, 16);
     doc.setTextColor(0, 0, 0);
@@ -319,19 +307,19 @@ export async function generatePDF(
         y = margin;
       }
 
-      // Task reference
+      
       doc.setFont('helvetica', 'bold');
       y = addWrappedText(`Task ${index + 1}:`, margin, y, 12);
       doc.setFont('helvetica', 'normal');
       y = addWrappedText(task.text.substring(0, 100) + (task.text.length > 100 ? '...' : ''), margin + 5, y, 10);
 
-      // Solutions if enabled
+      
       if (options.includeSolutions && task.correctAnswer) {
         doc.setFont('helvetica', 'bold');
         y = addWrappedText('Solution:', margin, y, 10);
         doc.setFont('helvetica', 'normal');
         
-        // For multiple choice, just show the correct option letter
+        
         if (task.type.toLowerCase() === 'multiple-choice') {
           y = addWrappedText(`Correct option: ${task.correctAnswer}`, margin + 5, y, 10);
         } else {
@@ -339,7 +327,7 @@ export async function generatePDF(
         }
       }
 
-      // Answers if enabled
+      
       if (options.includeAnswers && task.answer) {
         doc.setFont('helvetica', 'bold');
         y = addWrappedText('Answer:', margin, y, 10);
@@ -355,7 +343,7 @@ export async function generatePDF(
 }
 
 export async function generateDOCX(tasks: Question[], options: DocumentOptions): Promise<Blob> {
-  // Create task section paragraphs
+  
   const taskParagraphs = [
     new Paragraph({
       text: "Task Sheet",
@@ -363,8 +351,6 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
       alignment: AlignmentType.CENTER,
     }),
     ...tasks.flatMap((task, index) => {
-      const typeConfig = taskTypeConfigs[task.type] || { answerSpacing: 20, includeAnswerBox: false };
-      
       const paragraphs = [
         new Paragraph({
           children: [
@@ -378,7 +364,7 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
         }),
       ];
       
-      // Add instructions if enabled
+      
       if (options.includeInstructions && task.instructions) {
         paragraphs.push(
           new Paragraph({
@@ -394,7 +380,7 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
         );
       }
       
-      // Add task metadata
+      
       paragraphs.push(
         new Paragraph({
           children: [
@@ -408,169 +394,18 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
         })
       );
       
-      // Add answer space based on task type
-      if (options.includeAnswerSpaces) {
-        // Different answer formats based on task type
+      
+      if (options.includeAnswerSpaces && task.type.toLowerCase() !== 'multiple choice') {
+        
         switch(task.type.toLowerCase()) {
-          case 'multiple-choice':
-            // Add multiple choice options with minimal space
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Select one option:",
-                    size: 20,
-                    italics: true,
-                  }),
-                ],
-                spacing: { before: 120, after: 60 },
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({ text: "□ A    □ B    □ C    □ D", size: 20 }),
-                ],
-                spacing: { before: 60, after: 120 }, // Reduced spacing after options
-              })
-            );
-            break;
-            
-          case 'true-false':
-            // Add true/false options
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Select one:",
-                    size: 20,
-                    italics: true,
-                  }),
-                ],
-                spacing: { before: 120, after: 60 },
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({ text: "□ True    □ False", size: 20 }),
-                ],
-                spacing: { before: 60, after: 240 },
-              })
-            );
-            break;
-            
-          case 'matching':
-            // Add matching answer space
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Match the following:",
-                    size: 20,
-                    italics: true,
-                  }),
-                ],
-                spacing: { before: 120, after: 60 },
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({ text: "1. _____    2. _____    3. _____    4. _____", size: 20 }),
-                ],
-                spacing: { before: 60, after: 240 },
-              })
-            );
-            break;
-            
           case 'essay':
-            // Add essay answer space with a border
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Write your essay below:",
-                    size: 20,
-                    italics: true,
-                  }),
-                ],
-                spacing: { before: 120, after: 60 },
-                border: {
-                  top: { style: 'single', size: 1, color: 'CCCCCC' },
-                  bottom: { style: 'none', size: 0 },
-                  left: { style: 'single', size: 1, color: 'CCCCCC' },
-                  right: { style: 'single', size: 1, color: 'CCCCCC' },
-                }
-              }),
-              // Add several empty paragraphs for writing space with borders
-              ...Array(9).fill(0).map((_, i) => 
-                new Paragraph({
-                  children: [new TextRun({ text: "", size: 20 })],
-                  spacing: { before: 240, after: 240 },
-                  border: {
-                    top: { style: 'none', size: 0 },
-                    bottom: { style: i === 8 ? 'single' : 'none', size: 1, color: 'CCCCCC' },
-                    left: { style: 'single', size: 1, color: 'CCCCCC' },
-                    right: { style: 'single', size: 1, color: 'CCCCCC' },
-                  }
-                })
-              )
-            );
-            break;
             
-          case 'calculation':
-            // Add calculation work space with borders
             paragraphs.push(
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: "Work space for calculations:",
+                    text: "Answer:",
                     size: 20,
-                    italics: true,
-                  }),
-                ],
-                spacing: { before: 120, after: 60 },
-                border: {
-                  top: { style: 'single', size: 1, color: 'CCCCCC' },
-                  bottom: { style: 'none', size: 0 },
-                  left: { style: 'single', size: 1, color: 'CCCCCC' },
-                  right: { style: 'single', size: 1, color: 'CCCCCC' },
-                }
-              }),
-              // Add several empty paragraphs for calculations with borders
-              ...Array(4).fill(0).map((_, i) => 
-                new Paragraph({
-                  children: [new TextRun({ text: "", size: 20 })],
-                  spacing: { before: 120, after: 120 },
-                  border: {
-                    top: { style: 'none', size: 0 },
-                    bottom: { style: i === 3 ? 'single' : 'none', size: 1, color: 'CCCCCC' },
-                    left: { style: 'single', size: 1, color: 'CCCCCC' },
-                    right: { style: 'single', size: 1, color: 'CCCCCC' },
-                  }
-                })
-              ),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Final answer: ",
-                    size: 20,
-                    bold: true,
-                  }),
-                  new TextRun({
-                    text: "_______________________________",
-                    size: 20,
-                  }),
-                ],
-                spacing: { before: 120, after: 240 },
-              })
-            );
-            break;
-            
-          default:
-            // Default answer space for other types
-            paragraphs.push(
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: typeConfig.answerFormat || 'Answer:',
-                    size: 20,
-                    italics: true,
                   }),
                 ],
                 spacing: { before: 120, after: 60 },
@@ -579,7 +414,70 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
                 children: [
                   new TextRun({ text: "________________________________", size: 20 }),
                 ],
-                spacing: { before: 60, after: typeConfig.answerSpacing * 20 },
+                spacing: { before: 60, after: 240 },
+              })
+            );
+            break;
+          
+          case 'short answer':
+            
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Answer:",
+                    size: 20,
+                  }),
+                ],
+                spacing: { before: 120, after: 60 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "________________________________", size: 20 }),
+                ],
+                spacing: { before: 60, after: 240 },
+              })
+            );
+            break;
+          
+          case 'true-false':
+            
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Answer:",
+                    size: 20,
+                  }),
+                ],
+                spacing: { before: 120, after: 60 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "________________________________", size: 20 }),
+                ],
+                spacing: { before: 60, after: 240 },
+              })
+            );
+            break;
+          
+          default:
+           
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Answer:",
+                    size: 20,
+                  }),
+                ],
+                spacing: { before: 120, after: 60 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "________________________________", size: 20 }),
+                ],
+                spacing: { before: 60, after: 240 },
               })
             );
         }
@@ -589,14 +487,14 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
     }),
   ];
   
-  // Create solutions section paragraphs if needed
+  
   const solutionParagraphs = [];
   
   if (options.includeSolutions || options.includeAnswers) {
-    // Add page break before solutions
+    
     solutionParagraphs.push(new Paragraph({ children: [new PageBreak()] }));
     
-    // Add solutions header
+    
     solutionParagraphs.push(
       new Paragraph({
         text: "Solutions and Answers",
@@ -606,7 +504,7 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
       })
     );
     
-    // Add each task's solutions and answers
+    
     tasks.forEach((task, index) => {
       solutionParagraphs.push(
         new Paragraph({
@@ -630,7 +528,7 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
         })
       );
       
-      // Add solution if enabled
+      
       if (options.includeSolutions && task.correctAnswer) {
         const solutionText = task.type.toLowerCase() === 'multiple-choice' 
           ? `Correct option: ${task.correctAnswer}`
@@ -659,7 +557,7 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
         );
       }
       
-      // Add answer if enabled
+      
       if (options.includeAnswers && task.answer) {
         solutionParagraphs.push(
           new Paragraph({
@@ -686,7 +584,7 @@ export async function generateDOCX(tasks: Question[], options: DocumentOptions):
     });
   }
   
-  // Combine all paragraphs
+  
   const allParagraphs = [...taskParagraphs, ...solutionParagraphs];
   
   const doc = new Document({
@@ -714,7 +612,7 @@ export async function downloadDocument(
       blob = await generateDOCX(tasks, options);
     }
     
-    // Create a download link
+    
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -722,7 +620,7 @@ export async function downloadDocument(
     document.body.appendChild(a);
     a.click();
     
-    // Clean up
+    
     setTimeout(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);

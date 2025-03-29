@@ -14,7 +14,8 @@ import {
   BookOpen,
   Settings,
   TrendingUp,
-  Layers
+  Layers,
+  Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguageStore } from '../store/languageStore';
@@ -43,7 +44,7 @@ export const Navigation = () => {
   const location = useLocation();
   const { user, signOut } = useAuthStore();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [username, setUsername] = useState<string>('');
+  const [userFullName, setUserFullName] = useState<string>('');
 
   const isTaskPreviewPage = location.pathname === '/task-preview';
   const isGenerateActive = location.pathname.includes('/generate-') || isTaskPreviewPage;
@@ -62,7 +63,7 @@ export const Navigation = () => {
       path: '/generate-exam',
       label: t('nav.generateExam'),
       icon: <FileText className="h-5 w-5" />,
-      isActive: location.pathname === '/generate-exam' || location.pathname === '/exam-preview',
+      isActive: location.pathname.startsWith('/generate-exam') || location.pathname === '/exam-preview',
       className: 'transform transition-all duration-200 hover:scale-105 hover:shadow-md',
       requiresAuth: true
     },
@@ -97,12 +98,12 @@ export const Navigation = () => {
       if (user) {
         const { data, error } = await supabase
           .from('profiles')
-          .select('username')
+          .select('first_name, last_name')
           .eq('id', user.id)
           .single();
         
         if (data && !error) {
-          setUsername(data.username);
+          setUserFullName(`${data.first_name} ${data.last_name}`);
         }
       }
     };
@@ -122,10 +123,10 @@ export const Navigation = () => {
     return (
       <NavLink
         to={path}
-        className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
+        className={`flex items-center px-4 py-2 rounded-full transition-colors ${
           shouldHighlight
-            ? 'bg-blue-50 text-blue-600' 
-            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            ? 'bg-primary/10 text-primary' 
+            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
         } ${className}`}
       >
         {icon}
@@ -144,31 +145,32 @@ export const Navigation = () => {
   };
 
   return (
-    <nav className="bg-white shadow-sm border-b border-gray-200">
+    <nav className="bg-background border-b border-border">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
-            {/* Logo */}
+            
             <Link to="/" className="flex items-center space-x-3 transform transition-all duration-25 hover:scale-110">
-              <div className="flex items-center justify-center w-12 h-12 bg-blue-600 rounded-xl">
-                <GraduationCap className="w-8 h-8 text-white" />
+              <div className="flex items-center justify-center w-12 h-12 bg-primary rounded-xl">
+                <GraduationCap className="w-8 h-8 text-primary-foreground" />
               </div>
-              <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 
+              <span className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/80 
                              bg-clip-text text-transparent hidden sm:inline">
                 XPP
               </span>
             </Link>
 
-            {/* Desktop Navigation - Added margin and adjusted spacing */}
+            
             <div className="hidden md:flex items-center space-x-4 ml-12">
               {navItems.map((item, index) => 
                 'type' in item ? (
                   <div key={index} className="relative">
                     <button
                       onClick={() => setIsGenerateMenuOpen(!isGenerateMenuOpen)}
-                      className={`flex items-center px-4 py-2 rounded-lg transition-colors ${ isGenerateActive 
-                          ? 'bg-blue-50 text-blue-600' 
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      className={`flex items-center px-4 py-2 rounded-full transition-colors ${
+                        isGenerateActive 
+                          ? 'bg-primary/10 text-primary' 
+                          : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                       }`}
                     >
                       {item.icon}
@@ -184,7 +186,7 @@ export const Navigation = () => {
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
-                          className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-50"
+                          className="absolute left-0 mt-2 w-48 bg-background border border-border rounded-lg shadow-lg py-1 z-50"
                         >
                           {item.items.map((subItem, subIndex) => (
                             <NavLink
@@ -193,8 +195,8 @@ export const Navigation = () => {
                               className={({ isActive }) =>
                                 `block px-4 py-2 text-sm ${
                                   isActive
-                                    ? 'bg-blue-50 text-blue-600'
-                                    : 'text-gray-700 hover:bg-gray-100'
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'text-muted-foreground hover:bg-accent'
                                 }`
                               }
                               onClick={() => setIsGenerateMenuOpen(false)}
@@ -207,27 +209,27 @@ export const Navigation = () => {
                     </AnimatePresence>
                   </div>
                 ) : (
-                  <NavItem key={index} path={item.path} icon={item.icon} label={item.label} isActive={item.isActive} className={item.className} requiresAuth={item.requiresAuth} />
+                  <NavItem key={index} {...item} />
                 )
               )}
             </div>
           </div>
 
-          {/* Auth Navigation - Moved to the right */}
+          
           <div className="hidden md:flex items-center">
             {user ? (
-              <div className="relative ml-8">
+              <div className="relative">
                 <button
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transform transition-all duration-200 hover:scale-105 hover:shadow-md ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-full transform transition-all duration-200 hover:scale-105 hover:shadow-md ${
                     isProfileActive 
-                      ? 'bg-blue-50 text-blue-600' 
-                      : 'text-gray-600 hover:bg-gray-100'
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:bg-accent'
                   }`}
                 >
-                  <User className={`w-5 h-5 ${isProfileActive ? 'text-blue-600' : 'text-gray-600'}`} />
-                  <span className={isProfileActive ? 'text-blue-600' : 'text-gray-700'}>
-                    {username || 'Profile'}
+                  <User className={`w-5 h-5 ${isProfileActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span>
+                    {userFullName || 'Profile'}
                   </span>
                 </button>
                 
@@ -236,12 +238,12 @@ export const Navigation = () => {
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-50"
+                    className="absolute right-0 mt-2 w-48 bg-background border border-border rounded-lg shadow-lg py-1 z-50"
                   >
                     <Link
                       to="/profile"
                       onClick={handleProfileClick}
-                      className={`block px-4 py-2 text-gray-700 hover:bg-gray-100`}
+                      className="block px-4 py-2 text-muted-foreground hover:bg-accent"
                     >
                       <div className="flex items-center">
                         <User className="h-4 w-4 mr-2" />
@@ -252,18 +254,29 @@ export const Navigation = () => {
                     <Link
                       to="/statistics"
                       onClick={() => setShowProfileMenu(false)}
-                      className={`block px-4 py-2 text-gray-700 hover:bg-gray-100`}
+                      className="block px-4 py-2 text-muted-foreground hover:bg-accent"
                     >
                       <div className="flex items-center">
                         <TrendingUp className="h-4 w-4 mr-2" />
                         Statistics
                       </div>
                     </Link>
-                    
+
+                    <Link
+                      to="/study-groups"
+                      onClick={() => setShowProfileMenu(false)}
+                      className="block px-4 py-2 text-muted-foreground hover:bg-accent"
+                    >
+                      <div className="flex items-center">
+                        <Users className="h-4 w-4 mr-2" />
+                        Study Groups
+                      </div>
+                    </Link>
+
                     <Link
                       to="/settings"
                       onClick={() => setShowProfileMenu(false)}
-                      className={`block px-4 py-2 text-gray-700 hover:bg-gray-100`}
+                      className="block px-4 py-2 text-muted-foreground hover:bg-accent"
                     >
                       <div className="flex items-center">
                         <Settings className="h-4 w-4 mr-2" />
@@ -273,7 +286,7 @@ export const Navigation = () => {
                     
                     <button
                       onClick={handleSignOut}
-                      className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
+                      className="block w-full text-left px-4 py-2 text-red-500 hover:text-red-400 hover:bg-red-500/10"
                     >
                       <div className="flex items-center">
                         <LogOut className="h-4 w-4 mr-2" />
@@ -287,14 +300,14 @@ export const Navigation = () => {
               <div className="flex items-center space-x-4 ml-8">
                 <Link
                   to="/login"
-                  className="px-4 py-2 text-gray-600 hover:text-gray-900"
+                  className="px-4 py-2 text-muted-foreground hover:text-foreground rounded-full"
                 >
                   Sign In
                 </Link>
                 <Link
                   to="/register"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg
-                           hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-full
+                           hover:bg-primary/90 transition-colors"
                 >
                   Sign Up
                 </Link>
@@ -302,12 +315,12 @@ export const Navigation = () => {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
+          
           <div className="md:hidden flex items-center">
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 rounded-lg text-gray-600 hover:text-gray-900 
-                       hover:bg-gray-100 focus:outline-none"
+              className="p-2 rounded-full text-muted-foreground hover:text-foreground 
+                       hover:bg-accent focus:outline-none"
             >
               {isMobileMenuOpen ? (
                 <X className="h-6 w-6" />
@@ -319,14 +332,14 @@ export const Navigation = () => {
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden border-t border-gray-200"
+            className="md:hidden border-t border-border"
           >
             <div className="px-2 pt-2 pb-3 space-y-1">
               {navItems.map((item, index) => 
@@ -339,8 +352,8 @@ export const Navigation = () => {
                         className={({ isActive }) =>
                           `block px-3 py-2 rounded-md text-base font-medium ${
                             isActive
-                              ? 'bg-blue-50 text-blue-600'
-                              : 'text-gray-700 hover:bg-gray-100'
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-accent'
                           }`
                         }
                         onClick={() => setIsMobileMenuOpen(false)}
@@ -356,8 +369,8 @@ export const Navigation = () => {
                     className={({ isActive }) =>
                       `block px-3 py-2 rounded-md text-base font-medium ${
                         item.isActive || isActive || (item.path === '/generate-task' && isTaskPreviewPage)
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'text-gray-700 hover:bg-gray-100'
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-accent'
                       }`
                     }
                     onClick={() => setIsMobileMenuOpen(false)}

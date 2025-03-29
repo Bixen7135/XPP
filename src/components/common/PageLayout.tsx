@@ -16,8 +16,8 @@ export const PageLayout = ({ children, maxWidth = 'xl' }: PageLayoutProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className={`container mx-auto px-4 py-8 ${maxWidths[maxWidth]}`}>
+    <div className="bg-white dark:bg-gray-900 rounded-[40px]">
+      <main className={`container mx-auto px-4 py-20 ${maxWidths[maxWidth]}`}>
         {children}
       </main>
     </div>

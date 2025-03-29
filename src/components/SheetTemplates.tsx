@@ -28,8 +28,7 @@ export const SheetTemplates: React.FC<SheetTemplatesProps> = ({ onClose, onSelec
     try {
       setLoading(true);
       
-      // In a real app, you'd fetch templates from the database
-      // This is a mock implementation
+     
       setTemplates([
         {
           id: '1',

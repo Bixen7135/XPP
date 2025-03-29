@@ -19,7 +19,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// Type definitions for database
+
 export type Profile = {
   id: string;
   username: string;
@@ -39,7 +39,7 @@ export type UserSettings = {
 };
 
 const mapTaskToDb = (task: Question, userId: string): Omit<DbTask, 'created_at' | 'updated_at'> => {
-  // Ensure task has a valid UUID
+  
   const taskId = task.id && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(task.id) 
     ? task.id 
     : uuidv4();
@@ -77,7 +77,7 @@ export async function deleteTasks(taskIds: string[]) {
   if (!user) throw new Error('User not authenticated');
 
   try {
-    // First verify user has permission to delete these tasks
+    
     const { data: tasks, error: fetchError } = await supabase
       .from('tasks')
       .select('id, user_id')
@@ -85,13 +85,13 @@ export async function deleteTasks(taskIds: string[]) {
 
     if (fetchError) throw fetchError;
 
-    // Check if all tasks belong to the current user
+    
     const unauthorizedTasks = tasks?.filter(task => task.user_id !== user.id);
     if (unauthorizedTasks && unauthorizedTasks.length > 0) {
       throw new Error('Unauthorized to delete some tasks');
     }
 
-    // Perform hard delete
+    
     const { data, error } = await supabase
       .from('tasks')
       .delete()
@@ -106,7 +106,7 @@ export async function deleteTasks(taskIds: string[]) {
   }
 }
 
-// Get all sheets for the current user
+
 export async function getSheets() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -130,10 +130,10 @@ export async function getSheets() {
   }
 }
 
-// Get a single sheet by ID with its tasks
+
 export async function getSheetById(id: string) {
   try {
-    // Get the sheet
+    
     const { data: sheet, error } = await supabase
       .from('task_sheets')
       .select('*')
@@ -142,10 +142,10 @@ export async function getSheetById(id: string) {
     
     if (error) throw error;
     
-    // Get all tasks for this sheet
+    
     const { data: tasks, error: tasksError } = await supabase
       .from('tasks')
-      .select('*')  // Make sure to select all fields
+      .select('*')  
       .in('id', sheet.tasks);
     
     if (tasksError) throw tasksError;
@@ -157,7 +157,7 @@ export async function getSheetById(id: string) {
   }
 }
 
-// Create a new sheet
+
 export async function createSheet(title: string, description: string = '', taskIds: string[] = []) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -186,7 +186,7 @@ export async function createSheet(title: string, description: string = '', taskI
   }
 }
 
-// Update an existing sheet
+
 export async function updateSheet(sheetId: string, updates: Partial<{
   title: string;
   description: string;
@@ -199,7 +199,7 @@ export async function updateSheet(sheetId: string, updates: Partial<{
       throw new Error('User not authenticated');
     }
     
-    // First check if the sheet belongs to the user
+    
     const { data: sheet, error: checkError } = await supabase
       .from('task_sheets')
       .select('user_id')
@@ -210,7 +210,7 @@ export async function updateSheet(sheetId: string, updates: Partial<{
     if (!sheet) throw new Error('Sheet not found');
     if (sheet.user_id !== user.id) throw new Error('Unauthorized');
     
-    // Then update the sheet
+    
     const { data, error } = await supabase
       .from('task_sheets')
       .update({
@@ -230,7 +230,7 @@ export async function updateSheet(sheetId: string, updates: Partial<{
   }
 }
 
-// Delete sheets
+
 export async function deleteSheets(sheetIds: string[]) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -239,7 +239,7 @@ export async function deleteSheets(sheetIds: string[]) {
       throw new Error('User not authenticated');
     }
     
-    // Check if all sheets belong to the user
+    
     const { data: sheets, error: checkError } = await supabase
       .from('task_sheets')
       .select('id, user_id')
@@ -252,7 +252,7 @@ export async function deleteSheets(sheetIds: string[]) {
       throw new Error('Unauthorized to delete some sheets');
     }
     
-    // Delete the sheets
+    
     const { data, error } = await supabase
       .from('task_sheets')
       .delete()
@@ -267,7 +267,7 @@ export async function deleteSheets(sheetIds: string[]) {
   }
 }
 
-// Update the copySheet function to use the new structure
+
 export async function copySheet(sheetId: string) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -276,10 +276,10 @@ export async function copySheet(sheetId: string) {
       throw new Error('User not authenticated');
     }
     
-    // Get the original sheet
+    
     const original = await getSheetById(sheetId);
     
-    // Insert a copy with the updated structure
+    
     const { data, error } = await supabase
       .from('task_sheets')
       .insert({
@@ -300,7 +300,7 @@ export async function copySheet(sheetId: string) {
   }
 }
 
-// Add function to share a sheet with another user
+
 export async function shareSheet(sheetId: string, recipientEmail: string) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -309,7 +309,7 @@ export async function shareSheet(sheetId: string, recipientEmail: string) {
       throw new Error('User not authenticated');
     }
     
-    // First check if the sheet belongs to the user
+    
     const { data: sheet, error: checkError } = await supabase
       .from('task_sheets')
       .select('*')
@@ -320,7 +320,7 @@ export async function shareSheet(sheetId: string, recipientEmail: string) {
     if (checkError) throw checkError;
     if (!sheet) throw new Error('Sheet not found');
     
-    // Find the recipient user
+    
     const { data: recipient, error: recipientError } = await supabase
       .from('profiles')
       .select('id')
@@ -329,7 +329,7 @@ export async function shareSheet(sheetId: string, recipientEmail: string) {
       
     if (recipientError) throw new Error('Recipient not found');
     
-    // Create a shared sheet record
+    
     const { data, error } = await supabase
       .from('shared_sheets')
       .insert({
@@ -348,7 +348,7 @@ export async function shareSheet(sheetId: string, recipientEmail: string) {
   }
 }
 
-// Update the saveSheetVersion function
+
 export async function saveSheetVersion(sheetId: string) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -357,10 +357,10 @@ export async function saveSheetVersion(sheetId: string) {
       throw new Error('User not authenticated');
     }
     
-    // Get the current sheet
+    
     const { sheet } = await getSheetById(sheetId);
     
-    // Save a version
+    
     const { data, error } = await supabase
       .from('sheet_versions')
       .insert({
@@ -381,7 +381,7 @@ export async function saveSheetVersion(sheetId: string) {
   }
 }
 
-// Get versions of a sheet
+
 export async function getSheetVersions(sheetId: string) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -443,7 +443,7 @@ export async function saveTasks(tasks: Question[], returnIds = false): Promise<s
   }
 }
 
-// Save a task sheet
+
 export async function saveTaskSheet(sheet: Omit<TaskSheet, 'id' | 'created_at' | 'updated_at'>): Promise<string> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -452,7 +452,7 @@ export async function saveTaskSheet(sheet: Omit<TaskSheet, 'id' | 'created_at' |
       throw new Error('User not authenticated');
     }
     
-    // Make sure all tasks exist in the database
+    
     const taskIds = sheet.tasks;
     const { data: existingTasks, error: checkError } = await supabase
       .from('tasks')
@@ -468,7 +468,7 @@ export async function saveTaskSheet(sheet: Omit<TaskSheet, 'id' | 'created_at' |
       throw new Error(`Some tasks don't exist in the database: ${missingTaskIds.join(', ')}`);
     }
     
-    // Insert the sheet
+    
     const { data, error } = await supabase
       .from('task_sheets')
       .insert({

@@ -36,12 +36,12 @@ Respond in this JSON format:
 
     const response = JSON.parse(completion.choices[0]?.message?.content || '{}');
     return {
-      isCorrect: response.score >= 85, // Consider correct if score >= 85%
+      isCorrect: response.score >= 85, 
       feedback: `Score: ${response.score}%\n${response.feedback}\n\nKey points covered: ${response.keyPointsCovered.join(', ')}`
     };
   } catch (error) {
     console.error('AI answer checking failed:', error);
-    // Fallback to basic checking if AI fails
+    
     return {
       isCorrect: false,
       feedback: "Error evaluating answer. Using basic comparison."

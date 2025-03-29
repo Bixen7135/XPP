@@ -17,7 +17,7 @@ export const Button = ({
   className = '',
   ...props 
 }: ButtonProps) => {
-  const baseStyles = "rounded-xl font-semibold transition-all duration-200 flex items-center justify-center";
+  const baseStyles = "rounded-full font-semibold transition-all duration-200 flex items-center justify-center";
   const variants = {
     primary: "bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg",
     secondary: "bg-gray-600 text-white hover:bg-gray-700",

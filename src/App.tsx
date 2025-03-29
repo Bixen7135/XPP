@@ -16,8 +16,10 @@ import { SheetEdit } from './components/SheetEdit';
 import { Settings } from './components/auth/Settings';
 import { Statistics } from './components/auth/Statistics';
 import { Footer } from './components/common/Footer';
+import { StudyGroups } from './components/StudyGroups';
+import { ErrorPage } from './components/ErrorPage';
 
-// Lazy load components
+
 const ExamTypeSelector = lazy(() => import('./components/ExamTypeSelector').then(module => ({
   default: module.ExamTypeSelector
 })));
@@ -44,7 +46,7 @@ function App() {
   const { ToastComponent } = useToast();
   return (
     <BrowserRouter>
-      <div className="flex flex-col min-h-screen bg-gray-50">
+      <div className="flex flex-col min-h-screen bg-background text-foreground">
         <Navigation />
         <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>
@@ -54,7 +56,7 @@ function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 
-                {/* Protected Routes */}
+                
                 <Route path="/profile" element={
                   <ProtectedRoute>
                     <Profile />
@@ -116,6 +118,8 @@ function App() {
                     <Statistics />
                   </ProtectedRoute>
                 } />
+                <Route path="/study-groups" element={<StudyGroups />} />
+                <Route path="/error" element={<ErrorPage />} />
               </Routes>
             </main>
           </Suspense>

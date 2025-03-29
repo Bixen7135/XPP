@@ -1,7 +1,14 @@
 import { openai } from './openai';
-import type { PerformanceMetrics } from '../types/analytics';
+import type { PerformanceMetrics, AdaptiveMetrics } from '../types/analytics';
+import { generateAdaptiveLearningPath } from './adaptiveLearning';
 
-export async function generatePersonalizedPath(metrics: PerformanceMetrics) {
+export async function generatePersonalizedPath(metrics: PerformanceMetrics | AdaptiveMetrics) {
+  
+  if ('question_history' in metrics) {
+    return generateAdaptiveLearningPath(metrics as AdaptiveMetrics);
+  }
+
+  
   const prompt = `Based on the following performance metrics:
 - Overall Score: ${metrics.overall_score}
 - Weak Areas: ${metrics.weak_areas.join(', ')}
